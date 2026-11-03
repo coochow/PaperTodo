@@ -11,7 +11,7 @@ public static class PaperTitles
     // User-configurable display/edit cap (Settings → 标题最大长度), within MaxTitleLength.
     // Interpreted in full-width equivalents: a half-width character counts as 0.5, so
     // mixed CJK/Latin titles share one consistent visual budget.
-    public const int DefaultMaxTitleLength = 8;
+    public const int DefaultMaxTitleLength = 32;
     public const int MinConfigurableTitleLength = 2;
     public const int MaxConfigurableTitleLength = MaxTitleLength;
 
