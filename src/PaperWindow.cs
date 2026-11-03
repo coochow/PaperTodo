@@ -1928,6 +1928,9 @@ public sealed partial class PaperWindow : Window
         BuildBody();
         BuildDragLayer();
 
+        // Custom patch: right-button long-press drag on the whole shell (dev branch).
+        InitializeRightButtonDrag(_shell);
+
         BuildCapsuleShell();
         AttachCapsuleShellToWindowHost();
 
@@ -2349,9 +2352,6 @@ public sealed partial class PaperWindow : Window
             actionButtons.Children.Add(_openMarkdownButton);
         }
 
-        // Live opacity tuning straight from the top bar (persistent paper transparency).
-        actionButtons.Children.Add(CreateOpacityQuickSliderButton());
-
         _moreActionsButton = IconButton("⋯", Strings.Get("MenuPaperActions"));
         _moreActionsButton.Width = 23;
         _moreActionsButton.FontSize = AppTypography.Scale(16);
@@ -2598,6 +2598,12 @@ public sealed partial class PaperWindow : Window
             : BuildTodoBody();
         Grid.SetRow(body, 1);
         _shell.Children.Add(body);
+
+        // Custom patch: double-click blank body area toggles maximize/restore (dev branch).
+        if (body is FrameworkElement bodyElement)
+        {
+            InitializeBlankDoubleClickMaximize(bodyElement);
+        }
 
         if (_paper.Type == PaperTypes.Note)
         {

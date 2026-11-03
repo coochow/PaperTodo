@@ -222,33 +222,6 @@ public sealed partial class PaperWindow
         editorMenu.Items.Add(MenuItem(Strings.Get("MenuPaste"), (_, _) => box.Paste()));
         editorMenu.Items.Add(MenuItem(Strings.Get("MenuSelectAll"), (_, _) => box.SelectAll()));
 
-        MenuItem BuildTopBarToggleEditorMenuItem()
-        {
-            var toggle = _paper.TopBarHidden
-                ? MenuItem(Strings.Get("MenuShowTopBar"), (_, _) => ToggleManualTopBarHidden())
-                : MenuItem(Strings.Get("MenuHideTopBar"), (_, _) => ToggleManualTopBarHidden());
-            toggle.Tag = "topbar-toggle";
-            return toggle;
-        }
-
-        // Editing state keeps its own text menu; surface the immersive toggle here so the
-        // top bar can be brought back without leaving edit mode first. The menu is built
-        // once per presenter, so swap the tagged entry on each open to match current state.
-        editorMenu.Items.Add(MenuSeparator());
-        editorMenu.Items.Add(BuildTopBarToggleEditorMenuItem());
-        editorMenu.Opened += (_, _) =>
-        {
-            for (var i = editorMenu.Items.Count - 1; i >= 0; i--)
-            {
-                if (editorMenu.Items[i] is MenuItem { Tag: "topbar-toggle" })
-                {
-                    editorMenu.Items.RemoveAt(i);
-                }
-            }
-
-            editorMenu.Items.Add(BuildTopBarToggleEditorMenuItem());
-        };
-
         _notePreviewContextMenu = BuildPaperContextMenu();
         void ShowPreview()
         {

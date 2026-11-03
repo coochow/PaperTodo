@@ -211,13 +211,6 @@ public sealed partial class AppController
     private void SetExperimentalPersistentPaperOpacityLevel(double opacity) =>
         SetSettingFromUi("focus.persistent_paper_opacity", ExperimentalOpacityLevels.Normalize( opacity, ExperimentalOpacityLevels.DefaultPersistentPaper));
 
-    // Paper-window entry points for the top-bar quick opacity slider.
-    internal void SetExperimentalPersistentPaperOpacityFromPaper(bool enabled) =>
-        SetSettingFromUi("focus.persistent_paper_opacity_enabled", enabled);
-
-    internal void SetExperimentalPersistentPaperOpacityLevelFromPaper(double opacity) =>
-        SetSettingFromUi("focus.persistent_paper_opacity", ExperimentalOpacityLevels.Normalize( opacity, ExperimentalOpacityLevels.DefaultPersistentPaper));
-
     private void ToggleExperimentalRestingCapsuleOpacity() =>
         SetSettingFromUi("focus.capsule_opacity_enabled", !State.ExperimentalRestingCapsuleOpacity);
 
