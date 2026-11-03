@@ -2377,6 +2377,9 @@ public sealed partial class PaperWindow : Window
         actionButtons.Children.Add(_newTodoButton);
         actionButtons.Children.Add(_newNoteButton);
         buttons.Children.Add(_moreActionsButton);
+        // Custom patch (dev branch): fixed-slot opacity slider button, never hidden by
+        // the pinned-button responsive pass.
+        buttons.Children.Add(CreateTopBarOpacityButton());
         buttons.Children.Add(_closeButton);
         UpdateTopBarNewPaperButtons();
 
