@@ -1,5 +1,9 @@
 using System;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Media;
 
 namespace PaperTodo;
 
@@ -8,12 +12,127 @@ public sealed partial class PaperWindow
     private bool _experimentalFocusPresentationInitialized;
     private bool _inactiveTitleBarPresentationAttached;
     private bool _manualTopBarHiddenPresentationAttached;
+    private Popup? _opacityQuickSliderPopup;
 
     internal void UpdateExperimentalFocusPresentationSettings()
     {
         InitializeExperimentalFocusPresentation();
         RefreshExperimentalFocusPresentation();
         RefreshManualTopBarHiddenPresentation(animate: false);
+    }
+
+    // ---- Top-bar opacity quick slider ----
+    // A compact popup with a live slider so the persistent paper transparency can be
+    // tuned directly from the expanded paper without opening Settings.
+
+    private Button? _opacityQuickSliderButton;
+
+    internal Button CreateOpacityQuickSliderButton()
+    {
+        var button = IconButton("◐", Strings.Get("ToolTipOpacityQuickSlider"));
+        button.FontSize = AppTypography.Scale(14);
+        button.Click += (_, _) => ToggleOpacityQuickSlider(button);
+        _opacityQuickSliderButton = button;
+        return button;
+    }
+
+    private void ToggleOpacityQuickSlider(Button anchor)
+    {
+        if (_opacityQuickSliderPopup is { IsOpen: true })
+        {
+            _opacityQuickSliderPopup.IsOpen = false;
+            return;
+        }
+
+        _opacityQuickSliderPopup ??= BuildOpacityQuickSliderPopup();
+
+        _opacityQuickSliderPopup.PlacementTarget = anchor;
+        _opacityQuickSliderPopup.Placement = PlacementMode.Bottom;
+        _opacityQuickSliderPopup.IsOpen = true;
+    }
+
+    private Popup BuildOpacityQuickSliderPopup()
+    {
+        var state = _controller.State;
+
+        var enabledToggle = new CheckBox
+        {
+            Content = Strings.Get("LabsEnablePersistentPaperOpacity"),
+            IsChecked = state.ExperimentalPersistentPaperOpacity,
+            Margin = new Thickness(0, 0, 0, 6)
+        };
+        enabledToggle.SetResourceReference(Control.ForegroundProperty, "TextBrushKey");
+        enabledToggle.Click += (_, _) =>
+        {
+            _controller.SetExperimentalPersistentPaperOpacityFromPaper(
+                enabledToggle.IsChecked == true);
+        };
+
+        var slider = new Slider
+        {
+            Minimum = ExperimentalOpacityLevels.Minimum,
+            Maximum = ExperimentalOpacityLevels.Maximum,
+            Value = state.ExperimentalPersistentPaperOpacityLevel,
+            TickFrequency = ExperimentalOpacityLevels.Step,
+            IsSnapToTickEnabled = true,
+            Width = 150,
+            IsMoveToPointEnabled = true
+        };
+        slider.ValueChanged += (_, e) =>
+        {
+            if (!_opacityQuickSliderPopup!.IsOpen)
+            {
+                return;
+            }
+
+            _controller.SetExperimentalPersistentPaperOpacityLevelFromPaper(e.NewValue);
+        };
+
+        var percentText = new TextBlock
+        {
+            Text = $"{Math.Round(state.ExperimentalPersistentPaperOpacityLevel * 100):0}%",
+            FontSize = AppTypography.Scale(12),
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 4, 0, 0)
+        };
+        percentText.SetResourceReference(Control.ForegroundProperty, "TextBrushKey");
+        slider.ValueChanged += (_, e) =>
+            percentText.Text = $"{Math.Round(e.NewValue * 100):0}%";
+
+        var panel = new StackPanel
+        {
+            Margin = new Thickness(10, 8, 10, 10),
+            MinWidth = 170
+        };
+        panel.Children.Add(enabledToggle);
+        panel.Children.Add(slider);
+        panel.Children.Add(percentText);
+
+        var border = new Border
+        {
+            Child = panel,
+            CornerRadius = new CornerRadius(8),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(2)
+        };
+        border.SetResourceReference(Border.BackgroundProperty, "PaperSurfaceBrushKey");
+        border.SetResourceReference(Border.BorderBrushProperty, "PaperBorderBrushKey");
+
+        // Keep the slider fresh with the live state value while the popup is closed.
+        var popup = new Popup
+        {
+            Child = border,
+            StaysOpen = false,
+            AllowsTransparency = true,
+            Placement = PlacementMode.Bottom
+        };
+        popup.Opened += (_, _) =>
+        {
+            enabledToggle.IsChecked = state.ExperimentalPersistentPaperOpacity;
+            slider.Value = state.ExperimentalPersistentPaperOpacityLevel;
+            percentText.Text = $"{Math.Round(state.ExperimentalPersistentPaperOpacityLevel * 100):0}%";
+        };
+        return popup;
     }
 
     internal void RestoreExperimentalInactiveTitleBarPresentation()

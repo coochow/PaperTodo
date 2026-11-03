@@ -28,6 +28,7 @@ public static class Strings
             ["LabsEnablePersistentPaperOpacity"] = ["纸片常驻半透明", "Always fade papers", "紙を常に半透明", "메모 항상 반투명"],
             ["TipLabsPersistentPaperOpacity"] = ["展开的纸片任何时候都保持半透明（含编辑时）；适合把纸片当悬浮参考卡贴在其他内容上方。文字也会随之变淡，介意文字清晰度请关闭或调高级别。", "Expanded papers stay semi-transparent at all times, including while editing; useful as floating reference cards over other content. Text fades too — raise the level or disable if readability suffers.", "展開された紙は編集中を含め常に半透明になります。他のコンテンツの上に浮かぶ参考カードに向いています。文字も薄くなるため、読みにくい場合はレベルを上げるか無効にしてください。", "펼쳐진 메모는 편집 중을 포함해 항상 반투명하게 유지됩니다. 다른 콘텐츠 위에 떠 있는 참조 카드로 활용하기 좋습니다. 글자도 함께 옅어지므로 가독성이 걱정되면 수준을 올리거나 끄세요."],
             ["LabsPersistentPaperOpacityLevel"] = ["纸片常驻透明度", "Persistent paper opacity", "紙の常時透明度", "메모 상시 투명도"],
+            ["ToolTipOpacityQuickSlider"] = ["调节纸片透明度", "Adjust paper opacity", "紙の透明度を調整", "메모 투명도 조절"],
             ["LabsFocusRestingGroup"] = ["静置", "Resting", "静置", "유휴"],
             ["LabsDockedCapsuleBehavior"] = ["贴边胶囊", "Docked capsules", "端のカプセル", "가장자리 캡슐"],
             ["LabsFocusRestingOpacity"] = ["静置时自动半透明", "Fade while resting", "静置時に自動で半透明", "유휴 시 자동 반투명"],

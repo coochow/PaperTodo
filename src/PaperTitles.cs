@@ -4,9 +4,9 @@ namespace PaperTodo;
 
 public static class PaperTitles
 {
-    // Hard storage / edit cap in Unicode text elements (≈ full-width characters for CJK).
-    // Titles are never stored longer than this regardless of the user setting.
-    public const int MaxTitleLength = 20;
+    // Hard storage / edit cap in full-width equivalents. Text elements beyond this are
+    // truncated at commit time; the UTF-16 guard in the title edit box stays looser.
+    public const int MaxTitleLength = 32;
 
     // User-configurable display/edit cap (Settings → 标题最大长度), within MaxTitleLength.
     // Interpreted in full-width equivalents: a half-width character counts as 0.5, so

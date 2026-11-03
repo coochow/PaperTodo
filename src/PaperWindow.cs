@@ -2252,9 +2252,10 @@ public sealed partial class PaperWindow : Window
             FontSize = TitleFontSize,
             MinHeight = TitleLineHeight + 1,
             FontWeight = TitleFontWeight,
-            // UTF-16 unit guard at the hard full-width cap (20). Commit still clamps to the
-            // user setting (2–20) via PaperTitles.CleanCustomTitle so IME is not rewritten mid-edit.
-            MaxLength = PaperTitles.MaxTitleLength,
+            // UTF-16 unit guard sized above the full-width cap so combined/surrogate pairs
+            // can still reach the budget. Commit clamps to the user setting via
+            // PaperTitles.CleanCustomTitle so IME is not rewritten mid-edit.
+            MaxLength = PaperTitles.MaxTitleLength * 2,
             Padding = new Thickness(0),
             VerticalContentAlignment = VerticalAlignment.Center,
             FocusVisualStyle = null
@@ -2347,6 +2348,9 @@ public sealed partial class PaperWindow : Window
             _openMarkdownButton.Click += (_, _) => OpenMarkdownInDefaultEditor();
             actionButtons.Children.Add(_openMarkdownButton);
         }
+
+        // Live opacity tuning straight from the top bar (persistent paper transparency).
+        actionButtons.Children.Add(CreateOpacityQuickSliderButton());
 
         _moreActionsButton = IconButton("⋯", Strings.Get("MenuPaperActions"));
         _moreActionsButton.Width = 23;
