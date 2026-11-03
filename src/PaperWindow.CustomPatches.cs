@@ -18,20 +18,21 @@ public sealed partial class PaperWindow
     // right-button gesture must move the window manually: track screen deltas and
     // write Left/Top per move, ending when the right button is released.
 
-    private const int RightButtonDragHoldMilliseconds = 350;
+    private const int RightButtonDragHoldMilliseconds = 200;
     private const double RightButtonDragThreshold = 6.0;
 
     private DispatcherTimer? _rightButtonDragHoldTimer;
     private Point? _rightButtonDragStartPosition;
     private bool _rightButtonDragArmed;
     private bool _rightButtonDragging;
-    private Point _rightButtonDragScreenStart;
-    private double _rightButtonDragWindowLeft;
-    private double _rightButtonDragWindowTop;
-    private double _rightButtonDragDpiScale = 1.0;
+    private DeviceScreenRect _rightButtonDragWindowStartBounds;
+    private DeviceScreenPoint _rightButtonDragScreenStart;
 
     private void InitializeRightButtonDrag(FrameworkElement surface)
     {
+        // Maximize/minimize transitions must reconcile the immersive header extent.
+        StateChanged += (_, _) => RefreshManualTopBarHiddenForWindowState();
+
         surface.PreviewMouseRightButtonDown += (_, e) =>
         {
             if (_paper.IsCollapsed || !_paper.IsVisible)
@@ -137,31 +138,34 @@ public sealed partial class PaperWindow
 
     private void BeginRightButtonDrag(Point windowRelativeStart)
     {
-        _rightButtonDragging = true;
-        _rightButtonDragWindowLeft = Left;
-        _rightButtonDragWindowTop = Top;
-        _rightButtonDragScreenStart = PointToScreen(windowRelativeStart);
-        _rightButtonDragDpiScale = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-        if (_rightButtonDragDpiScale <= 0 || !double.IsFinite(_rightButtonDragDpiScale))
+        if (!WindowNative.TryGetWindowDeviceBounds(this, out var startBounds))
         {
-            _rightButtonDragDpiScale = 1.0;
+            return;
         }
+
+        _rightButtonDragging = true;
+        _rightButtonDragWindowStartBounds = startBounds;
+        _rightButtonDragScreenStart = DeviceScreenPoint.FromPoint(
+            PointToScreen(windowRelativeStart));
 
         DetachExperimentalAttachmentBeforeUserDrag();
     }
 
     private void UpdateRightButtonDragPosition(MouseEventArgs e)
     {
-        var screenNow = PointToScreen(e.GetPosition(this));
-        var dx = (screenNow.X - _rightButtonDragScreenStart.X) / _rightButtonDragDpiScale;
-        var dy = (screenNow.Y - _rightButtonDragScreenStart.Y) / _rightButtonDragDpiScale;
-        var targetLeft = _rightButtonDragWindowLeft + dx;
-        var targetTop = _rightButtonDragWindowTop + dy;
+        // Drive the drag in device pixels: screen coordinates are global across
+        // monitors, so mixed-DPI setups never drift the way per-monitor DIP math does.
+        var screenNow = DeviceScreenPoint.FromPoint(PointToScreen(e.GetPosition(this)));
+        var dx = (int)Math.Round(screenNow.X - _rightButtonDragScreenStart.X);
+        var dy = (int)Math.Round(screenNow.Y - _rightButtonDragScreenStart.Y);
+        var start = _rightButtonDragWindowStartBounds;
+        var target = new DeviceScreenRect(
+            start.Left + dx,
+            start.Top + dy,
+            start.Right + dx,
+            start.Bottom + dy);
         MoveWindowWithoutGeometrySave(() =>
-        {
-            Left = targetLeft;
-            Top = targetTop;
-        });
+            WindowNative.TrySetWindowDeviceBounds(this, target));
     }
 
     private void EndRightButtonDrag(bool saveGeometry)
@@ -240,6 +244,30 @@ public sealed partial class PaperWindow
         WindowState = WindowState == WindowState.Maximized
             ? WindowState.Normal
             : WindowState.Maximized;
+    }
+
+    // Maximized papers must fill the screen: the immersive hidden-header extent
+    // would otherwise leave an empty strip where the top bar used to be. The hidden
+    // flag stays on the paper data and is re-applied when leaving maximize.
+    internal void RefreshManualTopBarHiddenForWindowState()
+    {
+        if (!_isShellBuilt || _paper.TopBarHidden == false)
+        {
+            return;
+        }
+
+        if (WindowState == WindowState.Maximized || WindowState == WindowState.Minimized)
+        {
+            _paperChrome.SetHeaderExtent(0);
+        }
+        else if (!_paper.IsCollapsed)
+        {
+            UpdateManualTopBarHiddenExtent();
+            if (_manualTopBarHiddenPresentationAttached)
+            {
+                _paperChrome.SetHeaderOpacity(0, 0);
+            }
+        }
     }
 
     // ---------- Top-bar opacity quick slider (fixed slot) ----------
