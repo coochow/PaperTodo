@@ -172,13 +172,17 @@ public sealed partial class PaperWindow
             _topBarDrag?.IsDragging == true;
         var paperOpacity = _controller.IsAdvancedPaperTransparent(_paper)
             ? _controller.AdvancedShortcutOpacity
-            : !_controller.State.ExperimentalInactivePaperOpacity ||
-              _paper.IsCollapsed ||
-              expandedPaperInteractive
-                ? 1.0
-                : ExperimentalOpacityLevels.Normalize(
-                    _controller.State.ExperimentalInactivePaperOpacityLevel,
-                    ExperimentalOpacityLevels.DefaultInactivePaper);
+            : _controller.State.ExperimentalPersistentPaperOpacity && !_paper.IsCollapsed
+                ? ExperimentalOpacityLevels.Normalize(
+                    _controller.State.ExperimentalPersistentPaperOpacityLevel,
+                    ExperimentalOpacityLevels.DefaultPersistentPaper)
+                : !_controller.State.ExperimentalInactivePaperOpacity ||
+                  _paper.IsCollapsed ||
+                  expandedPaperInteractive
+                    ? 1.0
+                    : ExperimentalOpacityLevels.Normalize(
+                        _controller.State.ExperimentalInactivePaperOpacityLevel,
+                        ExperimentalOpacityLevels.DefaultInactivePaper);
         SetExperimentalVisualOpacity(_paperChrome, paperOpacity, animate);
 
         if ((_controller.State.ExperimentalRestingCapsuleOpacity ||

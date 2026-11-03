@@ -148,6 +148,12 @@ PaperTodo を手動でもう一度開いてください。問題が繰り返さ�
   <data name="MenuCollapseToCapsule" xml:space="preserve">
     <value>カプセルに折りたたむ</value>
   </data>
+  <data name="MenuHideTopBar" xml:space="preserve">
+    <value>上部バーを隠す（没入編集）</value>
+  </data>
+  <data name="MenuShowTopBar" xml:space="preserve">
+    <value>上部バーを表示</value>
+  </data>
   <data name="MenuDelete" xml:space="preserve">
     <value>削除</value>
   </data>

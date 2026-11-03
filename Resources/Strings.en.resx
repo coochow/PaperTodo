@@ -148,6 +148,12 @@ Error: {0}</value>
   <data name="MenuCollapseToCapsule" xml:space="preserve">
     <value>Collapse to capsule</value>
   </data>
+  <data name="MenuHideTopBar" xml:space="preserve">
+    <value>Hide top bar (immersive)</value>
+  </data>
+  <data name="MenuShowTopBar" xml:space="preserve">
+    <value>Show top bar</value>
+  </data>
   <data name="MenuDelete" xml:space="preserve">
     <value>Delete</value>
   </data>

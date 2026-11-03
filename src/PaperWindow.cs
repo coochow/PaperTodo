@@ -2720,6 +2720,11 @@ public sealed partial class PaperWindow : Window
                 : MenuItem(Strings.Get("MenuCollapseToCapsule"), (_, _) => SetCollapsedState(true)));
         }
 
+        // Immersive editing toggle: hide/show the expanded paper's whole top bar.
+        menu.Items.Add(_paper.TopBarHidden
+            ? MenuItem(Strings.Get("MenuShowTopBar"), (_, _) => ToggleManualTopBarHidden())
+            : MenuItem(Strings.Get("MenuHideTopBar"), (_, _) => ToggleManualTopBarHidden()));
+
         if (HasExperimentalCapsuleMagnet)
         {
             menu.Items.Add(MenuItem(

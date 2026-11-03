@@ -242,6 +242,7 @@ public static class ExperimentalOpacityLevels
     public const double Step = 0.05;
     public const double DefaultInactivePaper = 0.7;
     public const double DefaultRestingCapsule = 0.6;
+    public const double DefaultPersistentPaper = 0.7;
 
     public static double Normalize(double opacity, double fallback)
     {
@@ -536,6 +537,11 @@ public sealed class AppState
     public bool ExperimentalInactivePaperOpacity { get; set; }
     public double ExperimentalInactivePaperOpacityLevel { get; set; } =
         ExperimentalOpacityLevels.DefaultInactivePaper;
+    // Always-on paper transparency (immersive reference cards), independent from the
+    // focus-driven inactive fade: applies to expanded papers at all times.
+    public bool ExperimentalPersistentPaperOpacity { get; set; }
+    public double ExperimentalPersistentPaperOpacityLevel { get; set; } =
+        ExperimentalOpacityLevels.DefaultPersistentPaper;
     public bool ExperimentalRestingCapsuleOpacity { get; set; }
     public double ExperimentalRestingCapsuleOpacityLevel { get; set; } =
         ExperimentalOpacityLevels.DefaultRestingCapsule;
@@ -627,6 +633,11 @@ public sealed class PaperData
     public bool AlwaysOnTop { get; set; }
     public bool IsCollapsed { get; set; } = false;
     public double TextZoom { get; set; } = 1.0;
+
+    // Immersive editing: the whole top bar (title + action buttons) is hidden while
+    // the paper stays expanded and interactive. Restored via the paper context menu.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool TopBarHidden { get; set; } = false;
 
     // Note body provider.
     public string BodyProviderId { get; set; } = PaperBodyProviderIds.Markdown;

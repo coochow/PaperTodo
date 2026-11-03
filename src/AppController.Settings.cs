@@ -205,6 +205,12 @@ public sealed partial class AppController
     private void SetExperimentalInactivePaperOpacityLevel(double opacity) =>
         SetSettingFromUi("focus.inactive_opacity", ExperimentalOpacityLevels.Normalize( opacity, ExperimentalOpacityLevels.DefaultInactivePaper));
 
+    private void ToggleExperimentalPersistentPaperOpacity() =>
+        SetSettingFromUi("focus.persistent_paper_opacity_enabled", !State.ExperimentalPersistentPaperOpacity);
+
+    private void SetExperimentalPersistentPaperOpacityLevel(double opacity) =>
+        SetSettingFromUi("focus.persistent_paper_opacity", ExperimentalOpacityLevels.Normalize( opacity, ExperimentalOpacityLevels.DefaultPersistentPaper));
+
     private void ToggleExperimentalRestingCapsuleOpacity() =>
         SetSettingFromUi("focus.capsule_opacity_enabled", !State.ExperimentalRestingCapsuleOpacity);
 
@@ -808,6 +814,22 @@ public sealed partial class AppController
                 State.ExperimentalInactivePaperOpacity),
             editorWidth: 112,
             topMargin: 6));
+
+        content.Children.Add(SettingsFieldLabel(
+            Strings.Get("LabsFocusPersistentGroup"),
+            topMargin: 10));
+
+        content.Children.Add(CompactSettingsToggleField(
+            Strings.Get("LabsEnablePersistentPaperOpacity"),
+            State.ExperimentalPersistentPaperOpacity,
+            ToggleExperimentalPersistentPaperOpacity,
+            "TipLabsPersistentPaperOpacity",
+            CreateLabsPercentageStepper(
+                () => State.ExperimentalPersistentPaperOpacityLevel,
+                SetExperimentalPersistentPaperOpacityLevel,
+                State.ExperimentalPersistentPaperOpacity),
+            editorWidth: 112,
+            topMargin: 4));
 
         content.Children.Add(SettingsFieldLabel(
             Strings.Get("LabsFocusRestingGroup"),
@@ -1602,6 +1624,9 @@ public sealed partial class AppController
         State.ExperimentalInactivePaperOpacity = false;
         State.ExperimentalInactivePaperOpacityLevel =
             ExperimentalOpacityLevels.DefaultInactivePaper;
+        State.ExperimentalPersistentPaperOpacity = false;
+        State.ExperimentalPersistentPaperOpacityLevel =
+            ExperimentalOpacityLevels.DefaultPersistentPaper;
         State.ExperimentalRestingCapsuleOpacity = false;
         State.ExperimentalRestingCapsuleOpacityLevel =
             ExperimentalOpacityLevels.DefaultRestingCapsule;

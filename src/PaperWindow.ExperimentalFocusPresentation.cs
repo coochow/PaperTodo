@@ -7,11 +7,13 @@ public sealed partial class PaperWindow
 {
     private bool _experimentalFocusPresentationInitialized;
     private bool _inactiveTitleBarPresentationAttached;
+    private bool _manualTopBarHiddenPresentationAttached;
 
     internal void UpdateExperimentalFocusPresentationSettings()
     {
         InitializeExperimentalFocusPresentation();
         RefreshExperimentalFocusPresentation();
+        RefreshManualTopBarHiddenPresentation(animate: false);
     }
 
     internal void RestoreExperimentalInactiveTitleBarPresentation()
@@ -26,6 +28,94 @@ public sealed partial class PaperWindow
         _windowHost.LayoutUpdated -= OnInactiveTitleBarLayoutUpdated;
         _inactiveTitleBarPresentationAttached = false;
         _topBarHost!.IsHitTestVisible = true;
+    }
+
+    // ---- Manual immersive top-bar hiding (paper context menu toggle) ----
+    // Reuses the chrome header-collapse pipeline built for the inactive-title-bar
+    // labs feature: the shell keeps its original layout (row 0 reserved) while the
+    // background surface shrinks, so the body never reflows and restoring is lossless.
+
+    internal void ToggleManualTopBarHidden()
+    {
+        _paper.TopBarHidden = !_paper.TopBarHidden;
+        _controller.MarkDirty();
+        RefreshManualTopBarHiddenPresentation();
+    }
+
+    internal void RefreshManualTopBarHiddenPresentation(bool animate = true)
+    {
+        if (!_isShellBuilt || _topBarHost == null)
+        {
+            return;
+        }
+
+        var hidden = _paper.TopBarHidden && !_paper.IsCollapsed;
+        // Collapsed capsules have no top bar; keep the flag but never apply chrome
+        // changes while the paper is not expanded.
+        if (_paper.IsCollapsed)
+        {
+            hidden = false;
+        }
+
+        _topBarHost.IsHitTestVisible = !hidden;
+        if (hidden)
+        {
+            if (!_manualTopBarHiddenPresentationAttached)
+            {
+                _manualTopBarHiddenPresentationAttached = true;
+                _windowHost.LayoutUpdated += OnManualTopBarHiddenLayoutUpdated;
+            }
+
+            UpdateManualTopBarHiddenExtent();
+            _paperChrome.SetHeaderOpacity(
+                0,
+                animate && _controller.State.EnableAnimations
+                    ? AnimationTiming.ScaleMilliseconds(ExperimentalOpacityTransitionMilliseconds) : 0);
+        }
+        else
+        {
+            if (_manualTopBarHiddenPresentationAttached)
+            {
+                _manualTopBarHiddenPresentationAttached = false;
+                _windowHost.LayoutUpdated -= OnManualTopBarHiddenLayoutUpdated;
+            }
+
+            // The labs-driven inactive-title-bar path may still want the header faded;
+            // only restore when neither feature requests a hidden header.
+            var labsWantsHidden =
+                _controller.State.ExperimentalHideInactiveTitleBar &&
+                !IsMouseOver && !IsActive;
+            if (!labsWantsHidden)
+            {
+                _paperChrome.SetHeaderOpacity(
+                    1,
+                    animate && _controller.State.EnableAnimations
+                        ? AnimationTiming.ScaleMilliseconds(ExperimentalOpacityTransitionMilliseconds) : 0);
+                _paperChrome.SetHeaderExtent(0);
+            }
+        }
+    }
+
+    private void OnManualTopBarHiddenLayoutUpdated(object? sender, EventArgs e)
+    {
+        if (!_paper.TopBarHidden || _paper.IsCollapsed)
+        {
+            RefreshManualTopBarHiddenPresentation(animate: false);
+            return;
+        }
+
+        UpdateManualTopBarHiddenExtent();
+    }
+
+    private void UpdateManualTopBarHiddenExtent()
+    {
+        if (!_manualTopBarHiddenPresentationAttached || _topBarHost == null ||
+            _shell.RowDefinitions.Count == 0 || _shell.RowDefinitions[0].ActualHeight <= 0)
+        {
+            return;
+        }
+
+        _paperChrome.SetHeaderExtent(_shell.RowDefinitions[0].ActualHeight);
     }
 
     private void InitializeExperimentalFocusPresentation()

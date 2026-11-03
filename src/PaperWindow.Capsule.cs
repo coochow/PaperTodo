@@ -693,6 +693,16 @@ public sealed partial class PaperWindow
         if (collapsed)
         {
             RestoreExperimentalInactiveTitleBarPresentation();
+            // Collapse must clear the manual immersive header state too; the flag stays on
+            // the paper data and is re-applied when the paper expands again.
+            if (_manualTopBarHiddenPresentationAttached)
+            {
+                _paperChrome.SetHeaderOpacity(1, 0);
+                _paperChrome.SetHeaderExtent(0);
+                _windowHost.LayoutUpdated -= OnManualTopBarHiddenLayoutUpdated;
+                _manualTopBarHiddenPresentationAttached = false;
+                _topBarHost!.IsHitTestVisible = true;
+            }
         }
 
         PrepareExperimentalAttachmentForFormTransition(collapsed);
@@ -1196,6 +1206,22 @@ var expandedHeight = collapsed
 
         RefreshPaperContextMenus();
         _controller.RefreshTodoRowsForLinkedPaper(_paper.Id);
+
+        // Re-apply the immersive hidden top bar after an expand transition settles;
+        // collapse clears the chrome header state so nothing must persist there.
+        if (!collapsed)
+        {
+            Dispatcher.BeginInvoke(
+                (Action)(() =>
+                {
+                    if (_windowLifecycle == PaperWindowLifecycleState.Alive &&
+                        !_paper.IsCollapsed)
+                    {
+                        RefreshManualTopBarHiddenPresentation(animate: false);
+                    }
+                }),
+                System.Windows.Threading.DispatcherPriority.Loaded);
+        }
 
         if (!collapsed && activateOnExpand)
         {

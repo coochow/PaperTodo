@@ -148,6 +148,12 @@ PaperTodo를 수동으로 다시 여세요. 문제가 반복되면 PC를 다시 
   <data name="MenuCollapseToCapsule" xml:space="preserve">
     <value>캡슐로 접기</value>
   </data>
+  <data name="MenuHideTopBar" xml:space="preserve">
+    <value>상단 바 숨기기(몰입 편집)</value>
+  </data>
+  <data name="MenuShowTopBar" xml:space="preserve">
+    <value>상단 바 표시</value>
+  </data>
   <data name="MenuDelete" xml:space="preserve">
     <value>삭제</value>
   </data>

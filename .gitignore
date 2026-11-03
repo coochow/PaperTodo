@@ -26,3 +26,4 @@ plugins/data/
 # Local drafts
 *.draft.md
 
+release_local/

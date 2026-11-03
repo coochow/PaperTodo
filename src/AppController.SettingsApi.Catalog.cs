@@ -353,6 +353,11 @@ public sealed partial class AppController
             value => State.ExperimentalInactivePaperOpacity = value,
             SettingEffects.Opacity,
             title: Strings.Get("LabsEnableInactivePaperOpacity"));
+        yield return DefineSetting<bool>("focus.persistent_paper_opacity_enabled",
+            () => State.ExperimentalPersistentPaperOpacity,
+            value => State.ExperimentalPersistentPaperOpacity = value,
+            SettingEffects.Opacity,
+            title: Strings.Get("LabsEnablePersistentPaperOpacity"));
         yield return DefineSetting<bool>("focus.capsule_opacity_enabled",
             () => State.ExperimentalRestingCapsuleOpacity,
             value => State.ExperimentalRestingCapsuleOpacity = value,
@@ -373,6 +378,14 @@ public sealed partial class AppController
             value => State.ExperimentalInactivePaperOpacityLevel = value,
             SettingEffects.Opacity,
             title: Strings.Get("LabsInactivePaperOpacityLevel"),
+            minimum: 0.3,
+            maximum: 1,
+            step: 0.05);
+        yield return DefineSetting<double>("focus.persistent_paper_opacity",
+            () => State.ExperimentalPersistentPaperOpacityLevel,
+            value => State.ExperimentalPersistentPaperOpacityLevel = value,
+            SettingEffects.Opacity,
+            title: Strings.Get("LabsPersistentPaperOpacityLevel"),
             minimum: 0.3,
             maximum: 1,
             step: 0.05);

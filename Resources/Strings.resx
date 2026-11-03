@@ -157,6 +157,12 @@
   <data name="MenuCollapseToCapsule" xml:space="preserve">
     <value>折叠为胶囊</value>
   </data>
+  <data name="MenuHideTopBar" xml:space="preserve">
+    <value>隐藏顶栏（沉浸编辑）</value>
+  </data>
+  <data name="MenuShowTopBar" xml:space="preserve">
+    <value>显示顶栏</value>
+  </data>
   <data name="MenuDelete" xml:space="preserve">
     <value>删除</value>
   </data>
