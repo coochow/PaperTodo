@@ -561,6 +561,28 @@ internal static partial class WindowNative
         }
     }
 
+    // Custom patch (dev branch): unchecked async move for the right-button drag hot
+    // path. Size is frozen during the drag, so skip the GetWindowRect verification the
+    // checked path performs on every call.
+    internal static void MoveWindowDevicePositionAsync(Window window, int left, int top)
+    {
+        var handle = new WindowInteropHelper(window).Handle;
+        if (handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        _ = SetWindowPos(
+            handle,
+            IntPtr.Zero,
+            left,
+            top,
+            0,
+            0,
+            SwpNoSize | SwpNoZOrder | SwpNoActivate | SwpNoOwnerZOrder |
+            0x4000 /* SWP_ASYNCWINDOWPOS */);
+    }
+
     // Commit position and size as one native operation. Edge surfaces use physical screen pixels
     // as their source of truth; assigning WPF Left/Top/Width separately creates observable
     // intermediate HWND rectangles and was the direct cause of one-frame edge clipping.

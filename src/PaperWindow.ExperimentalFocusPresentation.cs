@@ -52,8 +52,10 @@ public sealed partial class PaperWindow
 
         var hidden = _paper.TopBarHidden && !_paper.IsCollapsed;
         // Collapsed capsules have no top bar; keep the flag but never apply chrome
-        // changes while the paper is not expanded.
-        if (_paper.IsCollapsed)
+        // changes while the paper is not expanded. Maximized papers must fill the
+        // screen edge-to-edge, so the immersive header collapse is suspended there
+        // too (Custom patch: suspend while maximized; re-applied on restore).
+        if (_paper.IsCollapsed || WindowState == WindowState.Maximized)
         {
             hidden = false;
         }
@@ -99,7 +101,8 @@ public sealed partial class PaperWindow
 
     private void OnManualTopBarHiddenLayoutUpdated(object? sender, EventArgs e)
     {
-        if (!_paper.TopBarHidden || _paper.IsCollapsed)
+        if (!_paper.TopBarHidden || _paper.IsCollapsed ||
+            WindowState == WindowState.Maximized)
         {
             RefreshManualTopBarHiddenPresentation(animate: false);
             return;

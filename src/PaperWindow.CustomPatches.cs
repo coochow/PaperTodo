@@ -159,14 +159,14 @@ public sealed partial class PaperWindow
         var dx = (int)Math.Round(screenNow.X - _rightButtonDragScreenStart.X);
         var dy = (int)Math.Round(screenNow.Y - _rightButtonDragScreenStart.Y);
         var start = _rightButtonDragWindowStartBounds;
-        var target = new DeviceScreenRect(
-            start.Left + dx,
-            start.Top + dy,
-            start.Right + dx,
-            start.Bottom + dy);
-        MoveWindowWithoutGeometrySave(() =>
-            WindowNative.TrySetWindowDeviceBounds(this, target));
+        MoveRightButtonDragWindowTo(start.Left + dx, start.Top + dy);
     }
+
+    // Hot path for the drag: size is frozen, so a plain async move beats the checked
+    // TrySetWindowDeviceBounds (which re-reads GetWindowRect every call) and keeps the
+    // window tracking the cursor without per-frame blocking.
+    private void MoveRightButtonDragWindowTo(int left, int top) =>
+        WindowNative.MoveWindowDevicePositionAsync(this, left, top);
 
     private void EndRightButtonDrag(bool saveGeometry)
     {
@@ -251,23 +251,9 @@ public sealed partial class PaperWindow
     // flag stays on the paper data and is re-applied when leaving maximize.
     internal void RefreshManualTopBarHiddenForWindowState()
     {
-        if (!_isShellBuilt || _paper.TopBarHidden == false)
-        {
-            return;
-        }
-
-        if (WindowState == WindowState.Maximized || WindowState == WindowState.Minimized)
-        {
-            _paperChrome.SetHeaderExtent(0);
-        }
-        else if (!_paper.IsCollapsed)
-        {
-            UpdateManualTopBarHiddenExtent();
-            if (_manualTopBarHiddenPresentationAttached)
-            {
-                _paperChrome.SetHeaderOpacity(0, 0);
-            }
-        }
+        // The authoritative RefreshManualTopBarHiddenPresentation already suspends
+        // the collapse while maximized; calling it covers both enter and leave.
+        RefreshManualTopBarHiddenPresentation(animate: false);
     }
 
     // ---------- Top-bar opacity quick slider (fixed slot) ----------
