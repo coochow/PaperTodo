@@ -12,15 +12,14 @@ namespace PaperTodo;
 // stay mechanical. Upstream files only carry short, anchored hook lines.
 public sealed partial class PaperWindow
 {
-    // ---------- Direct drag: Alt+left anywhere; plain left in preview mode ----------
-    // Both route into the upstream title-bar drag gesture verbatim: threshold-armed,
-    // tether aware, ending in the native caption-drag loop, so the feel is identical
-    // to dragging by the title bar (smooth, cross-monitor, works unfocused). Preview
-    // mode is read-only, so a plain left press there is free to move the window; the
-    // preview-press interception itself lives inside Note.cs's noteMouseDown (it runs
-    // with handledEventsToo and would otherwise steal the press before any shell-level
-    // handler). The right-button variant with manual tracking + mouse capture was
-    // removed: capturing on the window root deadlocked right-click interactions.
+    // ---------- Preview-mode plain-left drag ----------
+    // A plain left press on a read-only note body either drags the window (press +
+    // move > threshold hands off to the native caption drag) or enters the editor
+    // (still release calls the original caret-placement path). The gesture is fully
+    // self-contained: three temporary handlers on the editor, removed on the first
+    // terminal event. The preview-press interception lives inside Note.cs's
+    // noteMouseDown (it runs with handledEventsToo and would otherwise steal the
+    // press before any shell-level handler).
 
     internal bool ShouldPreviewPressStartWindowDrag(MarkdownTextBox box, MouseButtonEventArgs e)
     {
@@ -114,80 +113,24 @@ public sealed partial class PaperWindow
         // Maximize/minimize transitions must reconcile the immersive header extent.
         StateChanged += (_, _) => RefreshManualTopBarHiddenForWindowState();
 
-        surface.PreviewMouseLeftButtonDown += (_, e) =>
-        {
-            if (e.ChangedButton != MouseButton.Left ||
-                (Keyboard.Modifiers & ModifierKeys.Alt) == 0 ||
-                _paper.IsCollapsed ||
-                !_paper.IsVisible)
-            {
-                return;
-            }
-
-            // Route straight into the upstream title-bar drag pipeline: it arms its own
-            // session, captures on the drag source, and hands off to the native
-            // caption drag once the movement threshold is crossed.
-            BeginTitleBarDragGesture(surface, e);
-            e.Handled = true;
-        };
+        // Alt+left drag was removed: preview-mode plain-left drag covers the main
+        // flow, and edit-mode papers drag by the (possibly hidden-then-revealed) top
+        // bar. One gesture, one code path.
+        _ = surface;
     }
 
-    // ---------- Blank-body double-click maximize ----------
-    // The editor's TextView covers the whole body, so "blank" cannot be detected by hit
-    // source. A double-click is blank when it lands outside the TextView bounds or
-    // below the last rendered visual line; word selection keeps everything else.
-    // Alt-modified clicks belong to the drag gesture, never to maximize toggling.
+    // ---------- Maximize toggle: F11 ----------
+    // The blank-body double-click entry was removed: it structurally competed with
+    // the preview-press drag interception and the click-to-enter-editor path (all
+    // three share the same left-button press), and every patch layered on top risked
+    // regressing the verified drag behavior. F11 is keyboard-routed, immune to all
+    // mouse-gesture interference, and available in any paper state.
 
     private void InitializeBlankDoubleClickMaximize(FrameworkElement body)
     {
-        body.PreviewMouseLeftButtonDown += (_, e) =>
-        {
-            if (e.ClickCount != 2 || e.Handled ||
-                (Keyboard.Modifiers & ModifierKeys.Alt) != 0)
-            {
-                return;
-            }
-
-            if (!IsBlankNoteBodyHit(e))
-            {
-                return;
-            }
-
-            ToggleWindowStateForBlankDoubleClick();
-            e.Handled = true;
-        };
-    }
-
-    private bool IsBlankNoteBodyHit(MouseButtonEventArgs e)
-    {
-        var box = _noteBox;
-        if (box == null)
-        {
-            // Todo papers keep their native behavior.
-            return false;
-        }
-
-        var view = box.TextArea?.TextView;
-        if (view == null)
-        {
-            return false;
-        }
-
-        var p = e.GetPosition(view);
-        if (p.X < 0 || p.Y < 0 || p.X > view.ActualWidth || p.Y > view.ActualHeight)
-        {
-            // Outside the text viewport entirely (content padding / margins).
-            return true;
-        }
-
-        var lines = view.VisualLines;
-        if (lines == null || lines.Count == 0)
-        {
-            return true;
-        }
-
-        var last = lines[lines.Count - 1];
-        return p.Y > last.VisualTop + last.Height + 2;
+        // Retained as the F11 hook site (no double-click handling). The key handler
+        // lives in OnWindowPreviewKeyDown; see ToggleWindowStateForBlankDoubleClick.
+        _ = body;
     }
 
     private void ToggleWindowStateForBlankDoubleClick()

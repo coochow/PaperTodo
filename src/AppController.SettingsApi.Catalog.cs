@@ -353,6 +353,7 @@ public sealed partial class AppController
             value => State.ExperimentalInactivePaperOpacity = value,
             SettingEffects.Opacity,
             title: Strings.Get("LabsEnableInactivePaperOpacity"));
+        // Custom patch (dev branch): persistent paper transparency settings.
         yield return DefineSetting<bool>("focus.persistent_paper_opacity_enabled",
             () => State.ExperimentalPersistentPaperOpacity,
             value => State.ExperimentalPersistentPaperOpacity = value,

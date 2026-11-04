@@ -634,8 +634,9 @@ public sealed class PaperData
     public bool IsCollapsed { get; set; } = false;
     public double TextZoom { get; set; } = 1.0;
 
-    // Immersive editing: the whole top bar (title + action buttons) is hidden while
-    // the paper stays expanded and interactive. Restored via the paper context menu.
+    // Custom patch (dev branch): immersive editing — the whole top bar (title +
+    // action buttons) is hidden while the paper stays expanded and interactive.
+    // Restored via the paper context menu.
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool TopBarHidden { get; set; } = false;
 

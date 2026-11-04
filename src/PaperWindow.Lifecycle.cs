@@ -51,11 +51,6 @@ public sealed partial class PaperWindow
         public DeviceScreenPoint StartScreenPosition { get; }
         public ExperimentalTetherDragAnchor? TetherAnchor { get; }
         public bool TetherMoved { get; set; }
-
-        // Custom patch (dev branch): the element holding mouse capture, which may
-        // differ from the gesture trigger (the note editor triggers, the chrome owns
-        // the completion handlers). Released by EndTitleBarDragGesture.
-        public FrameworkElement? CaptureSource { get; set; }
     }
 
     private PaperWindowLifecycleState _windowLifecycle = PaperWindowLifecycleState.Alive;

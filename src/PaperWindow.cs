@@ -1928,7 +1928,7 @@ public sealed partial class PaperWindow : Window
         BuildBody();
         BuildDragLayer();
 
-        // Custom patch: Alt+left drag anywhere; plain left drags in preview mode (dev branch).
+        // Custom patch: preview-mode plain-left drag; window-state reconciler (dev branch).
         InitializeDragGestures(_shell);
 
         BuildCapsuleShell();
@@ -2031,15 +2031,7 @@ public sealed partial class PaperWindow : Window
         _shell.Children.Add(_dragLayer);
     }
 
-    private void BeginTitleBarDragGesture(FrameworkElement dragSource, MouseButtonEventArgs e) =>
-        BeginTitleBarDragGesture(dragSource, captureSource: null, e);
-
-    // Custom patch (dev branch): captureSource splits the gesture trigger from the
-    // mouse owner. The note editor can trigger a drag in preview mode, but capturing
-    // on the editor itself wedged mouse routing (its up/move handlers never finish a
-    // title-bar session). The window chrome owns the session and all its completion
-    // paths, so non-chrome triggers capture there instead.
-    private void BeginTitleBarDragGesture(FrameworkElement dragSource, FrameworkElement? captureSource, MouseButtonEventArgs e)
+    private void BeginTitleBarDragGesture(FrameworkElement dragSource, MouseButtonEventArgs e)
     {
         if (e.ChangedButton != MouseButton.Left)
         {
@@ -2062,11 +2054,8 @@ public sealed partial class PaperWindow : Window
             dragSource,
             startPosition,
             startScreenPosition,
-            tetherAnchor)
-        {
-            CaptureSource = captureSource
-        };
-        (captureSource ?? dragSource).CaptureMouse();
+            tetherAnchor);
+        dragSource.CaptureMouse();
         e.Handled = true;
     }
 
@@ -2143,14 +2132,7 @@ public sealed partial class PaperWindow : Window
     {
         var session = _titleBarDragSession;
         _titleBarDragSession = null;
-        // Custom patch (dev branch): release whichever element actually holds the
-        // capture (trigger and owner may differ).
-        var captureOwner = session?.CaptureSource ?? session?.Source;
-        if (captureOwner?.IsMouseCaptured == true)
-        {
-            captureOwner.ReleaseMouseCapture();
-        }
-        if (session?.Source.IsMouseCaptured == true && !ReferenceEquals(captureOwner, session.Source))
+        if (session?.Source.IsMouseCaptured == true)
         {
             session.Source.ReleaseMouseCapture();
         }

@@ -975,6 +975,21 @@ public sealed partial class PaperWindow
 
     private void OnWindowPreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
+        // Custom patch (dev branch): Shift + wheel tunes the whole-window persistent
+        // opacity (the paper fades as one surface). Alt is reserved for a future
+        // background-only channel that upstream material transparency may enable.
+        // Ctrl + wheel keeps the upstream text-zoom behavior.
+        var modifiers = Keyboard.Modifiers;
+        if ((modifiers & ModifierKeys.Shift) != 0 &&
+            (modifiers & (ModifierKeys.Alt | ModifierKeys.Control)) == 0)
+        {
+            var step = e.Delta > 0 ? 0.05 : -0.05;
+            _controller.SetExperimentalPersistentPaperOpacityLevelFromPaper(
+                _controller.State.ExperimentalPersistentPaperOpacityLevel + step);
+            e.Handled = true;
+            return;
+        }
+
         if (_paper.Type != PaperTypes.Note ||
             !BodySupports(PaperBodyCapabilities.TextZoom))
         {
@@ -986,8 +1001,8 @@ public sealed partial class PaperWindow
             return;
         }
 
-        var step = e.Delta > 0 ? 0.1 : -0.1;
-        _controller.SetPaperTextZoom(_paper, _paper.TextZoom + step);
+        var zoomStep = e.Delta > 0 ? 0.1 : -0.1;
+        _controller.SetPaperTextZoom(_paper, _paper.TextZoom + zoomStep);
         e.Handled = true;
     }
 

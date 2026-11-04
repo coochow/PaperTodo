@@ -211,7 +211,8 @@ public sealed partial class AppController
     private void SetExperimentalPersistentPaperOpacityLevel(double opacity) =>
         SetSettingFromUi("focus.persistent_paper_opacity", ExperimentalOpacityLevels.Normalize( opacity, ExperimentalOpacityLevels.DefaultPersistentPaper));
 
-    // Custom patch (dev branch): entry points for the top-bar quick opacity slider.
+    // Custom patch (dev branch): entry points for the top-bar quick opacity slider
+    // and the Alt/Shift+wheel whole-window opacity tuning.
     internal void SetExperimentalPersistentPaperOpacityFromPaper(bool enabled) =>
         SetSettingFromUi("focus.persistent_paper_opacity_enabled", enabled);
 

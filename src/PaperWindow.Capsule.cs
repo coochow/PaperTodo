@@ -693,8 +693,9 @@ public sealed partial class PaperWindow
         if (collapsed)
         {
             RestoreExperimentalInactiveTitleBarPresentation();
-            // Collapse must clear the manual immersive header state too; the flag stays on
-            // the paper data and is re-applied when the paper expands again.
+            // Custom patch (dev branch): collapse must clear the manual immersive header
+            // state too; the flag stays on the paper data and is re-applied on expand.
+
             if (_manualTopBarHiddenPresentationAttached)
             {
                 _paperChrome.SetHeaderOpacity(1, 0);
@@ -1207,8 +1208,8 @@ var expandedHeight = collapsed
         RefreshPaperContextMenus();
         _controller.RefreshTodoRowsForLinkedPaper(_paper.Id);
 
-        // Re-apply the immersive hidden top bar after an expand transition settles;
-        // collapse clears the chrome header state so nothing must persist there.
+        // Custom patch (dev branch): re-apply the immersive hidden top bar after an
+        // expand transition settles; collapse cleared the chrome header state.
         if (!collapsed)
         {
             Dispatcher.BeginInvoke(

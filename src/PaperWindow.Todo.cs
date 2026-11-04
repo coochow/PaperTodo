@@ -2793,6 +2793,16 @@ public sealed partial class PaperWindow
 
     private void OnWindowPreviewKeyDown(object sender, KeyEventArgs e)
     {
+        // Custom patch (dev branch): F11 toggles maximize/restore for any expanded
+        // paper. A keyboard entry point stays immune to the mouse-gesture routing that
+        // the preview-drag interception affects.
+        if (e.Key == Key.F11 && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            ToggleWindowStateForBlankDoubleClick();
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.Escape &&
             Keyboard.Modifiers == ModifierKeys.None &&
             TryClearTodoSelectionFromEscape())
