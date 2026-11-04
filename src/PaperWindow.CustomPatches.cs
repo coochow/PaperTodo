@@ -12,14 +12,104 @@ namespace PaperTodo;
 // stay mechanical. Upstream files only carry short, anchored hook lines.
 public sealed partial class PaperWindow
 {
-    // ---------- Alt + left-button drag anywhere on the paper ----------
-    // Reuses the upstream title-bar drag gesture verbatim: threshold-armed, tether
-    // aware, and ending in the native caption-drag loop, so the feel is identical to
-    // dragging by the title bar (smooth, cross-monitor, works unfocused). The right-
-    // button variant with manual tracking + mouse capture was removed: capturing on
-    // the window root deadlocked right-click interactions for seconds.
+    // ---------- Direct drag: Alt+left anywhere; plain left in preview mode ----------
+    // Both route into the upstream title-bar drag gesture verbatim: threshold-armed,
+    // tether aware, ending in the native caption-drag loop, so the feel is identical
+    // to dragging by the title bar (smooth, cross-monitor, works unfocused). Preview
+    // mode is read-only, so a plain left press there is free to move the window; the
+    // preview-press interception itself lives inside Note.cs's noteMouseDown (it runs
+    // with handledEventsToo and would otherwise steal the press before any shell-level
+    // handler). The right-button variant with manual tracking + mouse capture was
+    // removed: capturing on the window root deadlocked right-click interactions.
 
-    private void InitializeAltDragGesture(FrameworkElement surface)
+    internal bool ShouldPreviewPressStartWindowDrag(MarkdownTextBox box, MouseButtonEventArgs e)
+    {
+        if ((Keyboard.Modifiers & ModifierKeys.Alt) != 0 ||
+            _paper.IsCollapsed ||
+            !_paper.IsVisible)
+        {
+            return false;
+        }
+
+        // Links keep their open behavior: a press on a link never drags.
+        var textViewPoint = e.GetPosition(box.TextArea.TextView);
+        return !box.TryGetOpenableLinkFromTextViewPoint(textViewPoint, out _);
+    }
+
+    // Self-contained preview-press gesture: arm on press, hand off to the native
+    // caption drag when movement crosses the threshold, and on a still release fall
+    // back to the caller-provided enter-editor action (caret placement at the press
+    // point). All handlers are attached to the editor itself and removed when the
+    // gesture ends, so no capture or session ever outlives the press.
+    private const double PreviewDragThreshold = 6.0;
+
+    internal void BeginPreviewPressDragOrClick(
+        MarkdownTextBox box,
+        MouseButtonEventArgs e,
+        Action enterEditorAction)
+    {
+        var start = e.GetPosition(this);
+        var ended = false;
+        MouseButtonEventHandler? upHandler = null;
+        MouseEventHandler? moveHandler = null;
+        MouseEventHandler? captureLostHandler = null;
+
+        void End(bool dragged)
+        {
+            if (ended)
+            {
+                return;
+            }
+
+            ended = true;
+            box.PreviewMouseLeftButtonUp -= upHandler;
+            box.PreviewMouseMove -= moveHandler;
+            box.LostMouseCapture -= captureLostHandler;
+            if (ReferenceEquals(Mouse.Captured, box))
+            {
+                box.ReleaseMouseCapture();
+            }
+
+            if (!dragged)
+            {
+                enterEditorAction();
+            }
+        }
+
+        upHandler = (_, up) =>
+        {
+            End(dragged: false);
+            up.Handled = true;
+        };
+        moveHandler = (_, move) =>
+        {
+            if (move.LeftButton != MouseButtonState.Pressed)
+            {
+                End(dragged: true);
+                return;
+            }
+
+            var p = move.GetPosition(this);
+            if (Math.Abs(p.X - start.X) < PreviewDragThreshold &&
+                Math.Abs(p.Y - start.Y) < PreviewDragThreshold)
+            {
+                return;
+            }
+
+            End(dragged: true);
+            DetachExperimentalAttachmentBeforeUserDrag();
+            WindowNative.BeginWindowCaptionDrag(this);
+            move.Handled = true;
+        };
+        captureLostHandler = (_, _) => End(dragged: true);
+
+        box.PreviewMouseLeftButtonUp += upHandler;
+        box.PreviewMouseMove += moveHandler;
+        box.LostMouseCapture += captureLostHandler;
+        box.CaptureMouse();
+    }
+
+    private void InitializeDragGestures(FrameworkElement surface)
     {
         // Maximize/minimize transitions must reconcile the immersive header extent.
         StateChanged += (_, _) => RefreshManualTopBarHiddenForWindowState();

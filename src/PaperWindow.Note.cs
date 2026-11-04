@@ -777,6 +777,26 @@ public sealed partial class PaperWindow
                 return;
             }
 
+            // Custom patch (dev branch): in preview mode a plain left press either drags
+            // the window (press + move) or enters the editor (press + release, no move).
+            // The self-contained gesture lives in CustomPatches: it arms on press, hands
+            // off to the native caption drag once the threshold is crossed, and restores
+            // the enter-editor behavior on a plain release. Links keep their own path.
+            if (ShouldPreviewPressStartWindowDrag(box, e))
+            {
+                e.Handled = true;
+                BeginPreviewPressDragOrClick(
+                    box,
+                    e,
+                    () =>
+                    {
+                        box.BeginCaretRevealGesture();
+                        box.CaptureMouse();
+                        ShowEditorAtPreviewPoint(point, originalSource);
+                    });
+                return;
+            }
+
             // 点入编辑前先冻结：快照为按下瞬间的显灵值（预览态为 None），ShowEditorAtPreviewPoint
             // 内 SetPreviewMode(false) 的重排、落光标触发的 reveal 事件均保持在冻结布局上，
             // 松开后再由 up 收尾按最终光标显灵一次。
