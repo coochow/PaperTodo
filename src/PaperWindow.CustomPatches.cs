@@ -148,6 +148,11 @@ public sealed partial class PaperWindow
         _rightButtonDragScreenStart = DeviceScreenPoint.FromPoint(
             PointToScreen(windowRelativeStart));
 
+        // Capture the mouse on the window element: without capture, move events stop
+        // arriving once the cursor outruns the window (fast drags across monitors) and
+        // background papers never see the moves at all. Capture routes every move here.
+        Mouse.Capture(this, CaptureMode.Element);
+
         DetachExperimentalAttachmentBeforeUserDrag();
     }
 
@@ -172,6 +177,11 @@ public sealed partial class PaperWindow
     {
         _rightButtonDragging = false;
         _rightButtonDragStartPosition = null;
+        if (ReferenceEquals(Mouse.Captured, this))
+        {
+            Mouse.Capture(null);
+        }
+
         if (saveGeometry)
         {
             SaveGeometryForCurrentPresentation();

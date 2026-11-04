@@ -52,12 +52,27 @@ public sealed partial class PaperWindow
 
         var hidden = _paper.TopBarHidden && !_paper.IsCollapsed;
         // Collapsed capsules have no top bar; keep the flag but never apply chrome
-        // changes while the paper is not expanded. Maximized papers must fill the
-        // screen edge-to-edge, so the immersive header collapse is suspended there
-        // too (Custom patch: suspend while maximized; re-applied on restore).
-        if (_paper.IsCollapsed || WindowState == WindowState.Maximized)
+        // changes while the paper is not expanded. The hidden mode is state-preserving
+        // across maximize: while maximized the chrome is nudged up by the header extent
+        // so the body still starts at the very top of the screen (Custom patch).
+        if (_paper.IsCollapsed)
         {
             hidden = false;
+        }
+
+        var maximized = WindowState == WindowState.Maximized;
+        // While maximized, keep the header collapsed but nudge the whole chrome up by
+        // the same extent: WPF fills the work area, so without the nudge the body would
+        // start HeaderExtent pixels below the top of the screen.
+        var headerExtent = hidden && maximized && _shell.RowDefinitions.Count > 0
+            ? _shell.RowDefinitions[0].ActualHeight
+            : 0;
+        var chromeTopMargin = maximized && !UsesNativePaperChrome ? -headerExtent : 0;
+        if (_paperChrome.Margin.Top != chromeTopMargin)
+        {
+            _paperChrome.BeginAnimation(Border.MarginProperty, null);
+            var m = _paperChrome.Margin;
+            _paperChrome.Margin = new Thickness(m.Left, chromeTopMargin, m.Right, m.Bottom);
         }
 
         _topBarHost.IsHitTestVisible = !hidden;
@@ -101,14 +116,18 @@ public sealed partial class PaperWindow
 
     private void OnManualTopBarHiddenLayoutUpdated(object? sender, EventArgs e)
     {
-        if (!_paper.TopBarHidden || _paper.IsCollapsed ||
-            WindowState == WindowState.Maximized)
+        if (!_paper.TopBarHidden || _paper.IsCollapsed)
         {
             RefreshManualTopBarHiddenPresentation(animate: false);
             return;
         }
 
         UpdateManualTopBarHiddenExtent();
+        // Keep the maximized nudge in step with the live header extent.
+        if (WindowState == WindowState.Maximized && _shell.RowDefinitions.Count > 0)
+        {
+            RefreshManualTopBarHiddenPresentation(animate: false);
+        }
     }
 
     private void UpdateManualTopBarHiddenExtent()
