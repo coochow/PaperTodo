@@ -1928,8 +1928,8 @@ public sealed partial class PaperWindow : Window
         BuildBody();
         BuildDragLayer();
 
-        // Custom patch: right-button long-press drag on the whole shell (dev branch).
-        InitializeRightButtonDrag(_shell);
+        // Custom patch: Alt + left-button drag anywhere on the shell (dev branch).
+        InitializeAltDragGesture(_shell);
 
         BuildCapsuleShell();
         AttachCapsuleShellToWindowHost();

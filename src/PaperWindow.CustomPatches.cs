@@ -4,7 +4,6 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Threading;
 
 namespace PaperTodo;
 
@@ -13,191 +12,48 @@ namespace PaperTodo;
 // stay mechanical. Upstream files only carry short, anchored hook lines.
 public sealed partial class PaperWindow
 {
-    // ---------- Right-button long-press drag (manual tracking) ----------
-    // The native caption-drag modal loop requires the LEFT button to be held, so a
-    // right-button gesture must move the window manually: track screen deltas and
-    // write Left/Top per move, ending when the right button is released.
+    // ---------- Alt + left-button drag anywhere on the paper ----------
+    // Reuses the upstream title-bar drag gesture verbatim: threshold-armed, tether
+    // aware, and ending in the native caption-drag loop, so the feel is identical to
+    // dragging by the title bar (smooth, cross-monitor, works unfocused). The right-
+    // button variant with manual tracking + mouse capture was removed: capturing on
+    // the window root deadlocked right-click interactions for seconds.
 
-    private const int RightButtonDragHoldMilliseconds = 200;
-    private const double RightButtonDragThreshold = 6.0;
-
-    private DispatcherTimer? _rightButtonDragHoldTimer;
-    private Point? _rightButtonDragStartPosition;
-    private bool _rightButtonDragArmed;
-    private bool _rightButtonDragging;
-    private DeviceScreenRect _rightButtonDragWindowStartBounds;
-    private DeviceScreenPoint _rightButtonDragScreenStart;
-
-    private void InitializeRightButtonDrag(FrameworkElement surface)
+    private void InitializeAltDragGesture(FrameworkElement surface)
     {
         // Maximize/minimize transitions must reconcile the immersive header extent.
         StateChanged += (_, _) => RefreshManualTopBarHiddenForWindowState();
 
-        surface.PreviewMouseRightButtonDown += (_, e) =>
+        surface.PreviewMouseLeftButtonDown += (_, e) =>
         {
-            if (_paper.IsCollapsed || !_paper.IsVisible)
-            {
-                return;
-            }
-
-            _rightButtonDragStartPosition = e.GetPosition(this);
-            _rightButtonDragArmed = true;
-            _rightButtonDragHoldTimer ??= CreateRightButtonDragHoldTimer();
-            _rightButtonDragHoldTimer.Stop();
-            _rightButtonDragHoldTimer.Start();
-        };
-
-        surface.PreviewMouseRightButtonUp += (_, e) =>
-        {
-            if (_rightButtonDragging)
-            {
-                EndRightButtonDrag(saveGeometry: true);
-                // Swallow the release so no context menu opens right after a drag.
-                e.Handled = true;
-            }
-            else
-            {
-                _rightButtonDragHoldTimer?.Stop();
-                _rightButtonDragArmed = false;
-                _rightButtonDragStartPosition = null;
-            }
-        };
-
-        surface.PreviewMouseMove += (_, e) =>
-        {
-            if (_rightButtonDragging)
-            {
-                if (e.RightButton != MouseButtonState.Pressed)
-                {
-                    EndRightButtonDrag(saveGeometry: true);
-                }
-                else
-                {
-                    UpdateRightButtonDragPosition(e);
-                }
-
-                return;
-            }
-
-            if (!_rightButtonDragArmed || _rightButtonDragStartPosition is not { } start)
-            {
-                return;
-            }
-
-            var p = e.GetPosition(this);
-            if (Math.Abs(p.X - start.X) >= RightButtonDragThreshold ||
-                Math.Abs(p.Y - start.Y) >= RightButtonDragThreshold)
-            {
-                // Early movement cancels the hold; the click keeps its menu behavior.
-                _rightButtonDragHoldTimer?.Stop();
-                _rightButtonDragArmed = false;
-                _rightButtonDragStartPosition = null;
-            }
-        };
-
-        surface.MouseLeave += (_, _) =>
-        {
-            if (_rightButtonDragging)
-            {
-                // While dragging the pointer may leave the surface; button polling ends it.
-                return;
-            }
-
-            _rightButtonDragHoldTimer?.Stop();
-            _rightButtonDragArmed = false;
-            _rightButtonDragStartPosition = null;
-        };
-    }
-
-    private DispatcherTimer CreateRightButtonDragHoldTimer()
-    {
-        var timer = new DispatcherTimer(DispatcherPriority.Input)
-        {
-            Interval = TimeSpan.FromMilliseconds(RightButtonDragHoldMilliseconds)
-        };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            if (!_rightButtonDragArmed || _rightButtonDragStartPosition is not { } start)
-            {
-                return;
-            }
-
-            if (Mouse.RightButton != MouseButtonState.Pressed ||
+            if (e.ChangedButton != MouseButton.Left ||
+                (Keyboard.Modifiers & ModifierKeys.Alt) == 0 ||
                 _paper.IsCollapsed ||
                 !_paper.IsVisible)
             {
                 return;
             }
 
-            _rightButtonDragArmed = false;
-            BeginRightButtonDrag(start);
+            // Route straight into the upstream title-bar drag pipeline: it arms its own
+            // session, captures on the drag source, and hands off to the native
+            // caption drag once the movement threshold is crossed.
+            BeginTitleBarDragGesture(surface, e);
+            e.Handled = true;
         };
-        return timer;
-    }
-
-    private void BeginRightButtonDrag(Point windowRelativeStart)
-    {
-        if (!WindowNative.TryGetWindowDeviceBounds(this, out var startBounds))
-        {
-            return;
-        }
-
-        _rightButtonDragging = true;
-        _rightButtonDragWindowStartBounds = startBounds;
-        _rightButtonDragScreenStart = DeviceScreenPoint.FromPoint(
-            PointToScreen(windowRelativeStart));
-
-        // Capture the mouse on the window element: without capture, move events stop
-        // arriving once the cursor outruns the window (fast drags across monitors) and
-        // background papers never see the moves at all. Capture routes every move here.
-        Mouse.Capture(this, CaptureMode.Element);
-
-        DetachExperimentalAttachmentBeforeUserDrag();
-    }
-
-    private void UpdateRightButtonDragPosition(MouseEventArgs e)
-    {
-        // Drive the drag in device pixels: screen coordinates are global across
-        // monitors, so mixed-DPI setups never drift the way per-monitor DIP math does.
-        var screenNow = DeviceScreenPoint.FromPoint(PointToScreen(e.GetPosition(this)));
-        var dx = (int)Math.Round(screenNow.X - _rightButtonDragScreenStart.X);
-        var dy = (int)Math.Round(screenNow.Y - _rightButtonDragScreenStart.Y);
-        var start = _rightButtonDragWindowStartBounds;
-        MoveRightButtonDragWindowTo(start.Left + dx, start.Top + dy);
-    }
-
-    // Hot path for the drag: size is frozen, so a plain async move beats the checked
-    // TrySetWindowDeviceBounds (which re-reads GetWindowRect every call) and keeps the
-    // window tracking the cursor without per-frame blocking.
-    private void MoveRightButtonDragWindowTo(int left, int top) =>
-        WindowNative.MoveWindowDevicePositionAsync(this, left, top);
-
-    private void EndRightButtonDrag(bool saveGeometry)
-    {
-        _rightButtonDragging = false;
-        _rightButtonDragStartPosition = null;
-        if (ReferenceEquals(Mouse.Captured, this))
-        {
-            Mouse.Capture(null);
-        }
-
-        if (saveGeometry)
-        {
-            SaveGeometryForCurrentPresentation();
-        }
     }
 
     // ---------- Blank-body double-click maximize ----------
     // The editor's TextView covers the whole body, so "blank" cannot be detected by hit
     // source. A double-click is blank when it lands outside the TextView bounds or
     // below the last rendered visual line; word selection keeps everything else.
+    // Alt-modified clicks belong to the drag gesture, never to maximize toggling.
 
     private void InitializeBlankDoubleClickMaximize(FrameworkElement body)
     {
         body.PreviewMouseLeftButtonDown += (_, e) =>
         {
-            if (e.ClickCount != 2 || e.Handled)
+            if (e.ClickCount != 2 || e.Handled ||
+                (Keyboard.Modifiers & ModifierKeys.Alt) != 0)
             {
                 return;
             }
@@ -256,13 +112,10 @@ public sealed partial class PaperWindow
             : WindowState.Maximized;
     }
 
-    // Maximized papers must fill the screen: the immersive hidden-header extent
-    // would otherwise leave an empty strip where the top bar used to be. The hidden
-    // flag stays on the paper data and is re-applied when leaving maximize.
+    // Maximized papers keep the immersive hidden-header mode: the collapse stays and
+    // the chrome is nudged up by the extent (handled in the focus-presentation partial).
     internal void RefreshManualTopBarHiddenForWindowState()
     {
-        // The authoritative RefreshManualTopBarHiddenPresentation already suspends
-        // the collapse while maximized; calling it covers both enter and leave.
         RefreshManualTopBarHiddenPresentation(animate: false);
     }
 
