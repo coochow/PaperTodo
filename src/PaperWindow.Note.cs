@@ -222,6 +222,22 @@ public sealed partial class PaperWindow
         editorMenu.Items.Add(MenuItem(Strings.Get("MenuPaste"), (_, _) => box.Paste()));
         editorMenu.Items.Add(MenuItem(Strings.Get("MenuSelectAll"), (_, _) => box.SelectAll()));
 
+        // Custom patch (dev branch): temporary table view lives in the EDITOR menu —
+        // the transform is an edit (Ctrl+Z restores it), so its entry belongs beside
+        // the edit commands, not in the preview paper menu. Enabled when the caret
+        // sits in a GFM pipe-table block; re-evaluated on every menu open because the
+        // menu itself is built once per presenter, long before the caret moves.
+        editorMenu.Items.Add(MenuSeparator());
+        var editorTableViewItem = MenuItem(
+            Strings.Get("MenuTableView"),
+            (_, _) => ToggleNoteTableView());
+        editorTableViewItem.IsEnabled = IsTableViewAvailableAtCaret(box);
+        editorMenu.Opened += (_, _) =>
+        {
+            editorTableViewItem.IsEnabled = IsTableViewAvailableAtCaret(box);
+        };
+        editorMenu.Items.Add(editorTableViewItem);
+
         _notePreviewContextMenu = BuildPaperContextMenu();
         void ShowPreview()
         {
@@ -1174,7 +1190,8 @@ public sealed partial class PaperWindow
         SetCollapsedState(false, activateOnExpand: true);
     }
 
-    private void OpenCapsuleForEditing()
+    // Custom patch (dev branch): internal for the Alt+O collapse/restore command.
+    internal void OpenCapsuleForEditing()
     {
         if (_paper.IsCollapsed)
         {

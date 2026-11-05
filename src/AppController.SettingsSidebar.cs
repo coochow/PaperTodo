@@ -357,6 +357,8 @@ public sealed partial class AppController
         {
             yield return SettingsPage.Labs;
         }
+        // Custom patch (dev branch): About page is always visible, labs or not.
+        yield return SettingsPage.About;
     }
 
     private UIElement BuildSettingsSidebarNavigationItem(SettingsPage page)
@@ -477,6 +479,8 @@ public sealed partial class AppController
         SettingsPage.Shortcuts => BuildSettingsLiveRegion("shortcuts.bindings", BuildShortcutSettingsPage),
         SettingsPage.Plugins => BuildPluginsSettingsPage(),
         SettingsPage.Labs => BuildLabsSettingsPage(),
+        // Custom patch (dev branch): About page builder lives in its own partial.
+        SettingsPage.About => BuildAboutSettingsPage(),
         _ => BuildSettingsSidebarGeneralPage()
     };
 
@@ -490,6 +494,8 @@ public sealed partial class AppController
         SettingsPage.Shortcuts => Strings.Get("SettingsShortcuts"),
         SettingsPage.Plugins => Strings.Get("SettingsPlugins"),
         SettingsPage.Labs => Strings.Get("SettingsLabs"),
+        // Custom patch (dev branch): About page label.
+        SettingsPage.About => SettingsSidebarLocalized("关于", "About", "情報", "정보"),
         _ => Strings.Get("TraySettings")
     };
 

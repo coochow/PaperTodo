@@ -152,131 +152,42 @@ public sealed partial class PaperWindow
         RefreshManualTopBarHiddenPresentation(animate: false);
     }
 
-    // ---------- Top-bar opacity quick slider (fixed slot) ----------
-    // Sits in the fixed button row (between the ellipsis and close buttons) instead of
-    // the pinned action area, so the responsive layout pass never hides it. Tuning goes
-    // through the settings pipeline, which refreshes every paper window live.
+    // ---------- Temporary table view (editor context menu) ----------
+    // The caret anchors the search for a GFM pipe-table block; the transform swaps it
+    // for an aligned code block through a single document edit so Ctrl+Z (an editor
+    // command) restores the raw table. The entry lives in the EDITOR menu — beside
+    // the edit commands it belongs with — and is enabled when the caret is in a table.
 
-    private Popup? _topBarOpacityPopup;
-    private CheckBox? _topBarOpacityEnabledToggle;
-    private Slider? _topBarOpacitySlider;
-    private TextBlock? _topBarOpacityPercentText;
-
-    internal Button CreateTopBarOpacityButton()
+    internal bool IsTableViewAvailableAtCaret(MarkdownTextBox box)
     {
-        var button = IconButton("◐", Strings.Get("ToolTipOpacityQuickSlider"));
-        button.Width = 23;
-        button.FontSize = AppTypography.Scale(14);
-        button.Click += (_, _) => ToggleTopBarOpacityPopup(button);
-        return button;
-    }
-
-    private void ToggleTopBarOpacityPopup(Button anchor)
-    {
-        if (_topBarOpacityPopup is { IsOpen: true })
+        if (_paper.IsCollapsed)
         {
-            _topBarOpacityPopup.IsOpen = false;
-            return;
+            return false;
         }
 
-        _topBarOpacityPopup ??= BuildTopBarOpacityPopup();
-        RefreshTopBarOpacityPopupValues();
-        _topBarOpacityPopup.PlacementTarget = anchor;
-        _topBarOpacityPopup.Placement = PlacementMode.Bottom;
-        _topBarOpacityPopup.IsOpen = true;
+        var caret = Math.Clamp(box.CaretIndex, 0, Math.Max(0, box.Text.Length));
+        return MarkdownTablePaste.TryBuildTableBlockView(box.Text, caret).HasValue;
     }
 
-    private Popup BuildTopBarOpacityPopup()
+    private void ToggleNoteTableView()
     {
-        var state = _controller.State;
-
-        var enabledToggle = _topBarOpacityEnabledToggle = new CheckBox
-        {
-            Content = Strings.Get("LabsEnablePersistentPaperOpacity"),
-            IsChecked = state.ExperimentalPersistentPaperOpacity,
-            Margin = new Thickness(0, 0, 0, 6),
-            Foreground = TextBrush
-        };
-        enabledToggle.Click += (_, _) =>
-            _controller.SetExperimentalPersistentPaperOpacityFromPaper(
-                enabledToggle.IsChecked == true);
-
-        var slider = _topBarOpacitySlider = new Slider
-        {
-            Minimum = ExperimentalOpacityLevels.Minimum,
-            Maximum = ExperimentalOpacityLevels.Maximum,
-            Value = state.ExperimentalPersistentPaperOpacityLevel,
-            TickFrequency = ExperimentalOpacityLevels.Step,
-            IsSnapToTickEnabled = true,
-            Width = 150,
-            IsMoveToPointEnabled = true
-        };
-        slider.ValueChanged += (_, e) =>
-        {
-            if (_topBarOpacityPopup?.IsOpen != true)
-            {
-                return;
-            }
-
-            _controller.SetExperimentalPersistentPaperOpacityLevelFromPaper(e.NewValue);
-            if (_topBarOpacityPercentText != null)
-            {
-                _topBarOpacityPercentText.Text = $"{Math.Round(e.NewValue * 100):0}%";
-            }
-        };
-
-        var percentText = _topBarOpacityPercentText = new TextBlock
-        {
-            Text = $"{Math.Round(state.ExperimentalPersistentPaperOpacityLevel * 100):0}%",
-            FontSize = AppTypography.Scale(12),
-            FontWeight = FontWeights.SemiBold,
-            Margin = new Thickness(0, 4, 0, 0),
-            Foreground = TextBrush
-        };
-
-        var panel = new StackPanel
-        {
-            Margin = new Thickness(10, 8, 10, 10),
-            MinWidth = 170
-        };
-        panel.Children.Add(enabledToggle);
-        panel.Children.Add(slider);
-        panel.Children.Add(percentText);
-
-        // Reuse the live chrome brushes so the popup follows the current skin without
-        // resource lookup (a Popup lives outside the window's visual tree).
-        var border = new Border
-        {
-            Child = panel,
-            CornerRadius = new CornerRadius(8),
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(2),
-            Background = _paperChrome.Background,
-            BorderBrush = _paperChrome.BorderBrush
-        };
-
-        return new Popup
-        {
-            Child = border,
-            StaysOpen = false,
-            AllowsTransparency = true
-        };
-    }
-
-    private void RefreshTopBarOpacityPopupValues()
-    {
-        if (_topBarOpacityEnabledToggle == null || _topBarOpacitySlider == null)
+        var box = _noteBox;
+        if (box == null)
         {
             return;
         }
 
-        var state = _controller.State;
-        _topBarOpacityEnabledToggle.IsChecked = state.ExperimentalPersistentPaperOpacity;
-        _topBarOpacitySlider.Value = state.ExperimentalPersistentPaperOpacityLevel;
-        if (_topBarOpacityPercentText != null)
+        var caret = Math.Clamp(box.CaretIndex, 0, Math.Max(0, box.Text.Length));
+        var plan = MarkdownTablePaste.TryBuildTableBlockView(box.Text, caret);
+        if (plan is not { } block)
         {
-            _topBarOpacityPercentText.Text =
-                $"{Math.Round(state.ExperimentalPersistentPaperOpacityLevel * 100):0}%";
+            return;
         }
+
+        box.Select(block.Start, block.Length);
+        box.SelectedText = block.Replacement;
+        // Single undo step restores the raw pipe table.
+        box.Select(block.Start + block.Replacement.Length, 0);
     }
+
 }

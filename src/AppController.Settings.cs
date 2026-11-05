@@ -25,7 +25,9 @@ public sealed partial class AppController
         Visual,
         Shortcuts,
         Plugins,
-        Labs
+        Labs,
+        // Custom patch (dev branch): About page (version, docs links, future update checks).
+        About
     }
 
     private const string AuthorName = "Designed by trigger";

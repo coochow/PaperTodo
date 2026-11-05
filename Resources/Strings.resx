@@ -160,6 +160,9 @@
   <data name="MenuHideTopBar" xml:space="preserve">
     <value>隐藏顶栏（沉浸编辑）</value>
   </data>
+  <data name="MenuTableView" xml:space="preserve">
+    <value>表格视图（临时）</value>
+  </data>
   <data name="MenuShowTopBar" xml:space="preserve">
     <value>显示顶栏</value>
   </data>

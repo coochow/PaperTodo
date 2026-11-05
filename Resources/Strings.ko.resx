@@ -151,6 +151,9 @@ PaperTodo를 수동으로 다시 여세요. 문제가 반복되면 PC를 다시 
   <data name="MenuHideTopBar" xml:space="preserve">
     <value>상단 바 숨기기(몰입 편집)</value>
   </data>
+  <data name="MenuTableView" xml:space="preserve">
+    <value>테이블 보기(임시)</value>
+  </data>
   <data name="MenuShowTopBar" xml:space="preserve">
     <value>상단 바 표시</value>
   </data>

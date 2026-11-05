@@ -61,6 +61,10 @@ public sealed partial class AppController
             case ExperimentalShortcutKind.CurrentPaperTransparent:
                 ToggleAdvancedCurrentPaperTransparent();
                 break;
+            // Custom patch (dev branch): Alt+O collapse/restore expanded papers.
+            case ExperimentalShortcutKind.CollapseExpandedPapers:
+                ToggleCollapseExpandedPapers();
+                break;
         }
     }
 

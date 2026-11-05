@@ -20,7 +20,10 @@ internal enum ExperimentalShortcutKind
     LockAllPapers,
     AllPapersTransparent,
     AllCapsulesTransparent,
-    CurrentPaperTransparent
+    CurrentPaperTransparent,
+    // Custom patch (dev branch): collapse all expanded papers to capsules and
+    // restore the previously expanded set (capsules themselves stay untouched).
+    CollapseExpandedPapers
 }
 
 internal sealed record GlobalShortcutDefinition(
@@ -58,6 +61,8 @@ internal static class GlobalShortcutCatalog
     public const string AllPapersTransparent = "labs.transparentAllPapers";
     public const string AllCapsulesTransparent = "labs.transparentAllCapsules";
     public const string CurrentPaperTransparent = "labs.transparentCurrentPaper";
+    // Custom patch (dev branch): collapse all expanded papers / restore them.
+    public const string CollapseExpandedPapers = "general.collapseExpandedPapers";
 
     public static IReadOnlyList<GlobalShortcutDefinition> Definitions { get; } = BuildDefinitions();
 
@@ -248,7 +253,15 @@ internal static class GlobalShortcutCatalog
                 "LabsCurrentPaperTransparent",
                 "Ctrl+Alt+Shift+T",
                 GlobalShortcutGroup.Labs,
-                ExperimentalKind: ExperimentalShortcutKind.CurrentPaperTransparent)
+                ExperimentalKind: ExperimentalShortcutKind.CurrentPaperTransparent),
+            // Custom patch (dev branch): Alt+O collapse/restore expanded papers; the
+            // label key is a custom Supplemental string.
+            new(
+                CollapseExpandedPapers,
+                "ShortcutCollapseExpandedPapers",
+                "",
+                GlobalShortcutGroup.General,
+                ExperimentalKind: ExperimentalShortcutKind.CollapseExpandedPapers)
         };
 
         for (var ordinal = 1; ordinal <= 9; ordinal++)

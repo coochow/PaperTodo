@@ -22,14 +22,20 @@
 | P3 | 标题长度按全宽当量计（半角=0.5），默认/上限 32 | `PaperTitles.cs`(重写计数+EastAsianWidthCategory 新类) `PaperWindow.cs`(标题编辑框 MaxLength×2) | 上游文件中改 | ✅ 已确认 |
 | P4 | 预览态左键直接拖动窗口（自闭环手势：按下挂三处理器，移动>6px→原生 caption 拖动，静止松开→回调原进编辑路径；链接不劫持） | `PaperWindow.CustomPatches.cs`(ShouldPreviewPressStartWindowDrag+BeginPreviewPressDragOrClick) `PaperWindow.Note.cs`(noteMouseDown 预览分支单点插入+锚) `PaperWindow.cs`(BuildShell 挂 StateChanged reconciler+锚) | 独立文件为主 | ✅ 已确认 |
 | P5 | F11 全屏/还原（沉浸顶栏状态跨最大化一致） | `PaperWindow.Todo.cs`(OnWindowPreviewKeyDown 头部插入+锚) `PaperWindow.CustomPatches.cs`(ToggleWindowStateForBlankDoubleClick) | 独立文件为主 | ✅ 已确认 |
-| P6 | 透明度快捷调节双入口（顶栏固定按钮区「◐」弹滑杆 Popup；Shift+滚轮 30%~100%） | `PaperWindow.CustomPatches.cs`(Popup 构建+滑杆) `PaperWindow.cs`(固定按钮区 1 行插入+锚) `PaperWindow.Note.cs`(OnWindowPreviewMouseWheel 头部 Shift 分支+锚) `Strings.cs`(ToolTipOpacityQuickSlider 键) | 独立文件为主 | ✅ 已确认 |
+| P6 | 透明度调节：Shift+滚轮 30%~100%（唯一快捷入口；◐ 按钮已按用户裁决删除，设置页保留开关+步进器） | `PaperWindow.Note.cs`(OnWindowPreviewMouseWheel 头部 Shift 分支+锚) `Strings.cs` | 单点小改 | ✅ 已确认 |
+| P7 | 设置→「关于」页（版本号+定制构建说明+使用手册单链接，指向 fork 的 CUSTOM_FEATURES.md；预留未来检查更新/OTA） | `AppController.Settings.About.cs`(全新分部文件) `AppController.Settings.cs`(枚举+About+锚) `AppController.SettingsSidebar.cs`(导航项+路由+锚) | 独立文件为主 | ✅ 已确认 |
+| P8 | 编辑器右键「表格视图（临时）」：光标在 GFM 管道表格内可用（菜单 Opened 时按光标动态置灰），转换为 CJK 感知等宽对齐代码块，Ctrl+Z 一步还原原始表格；粘贴永远原样（数据零损失） | `MarkdownTablePaste.cs`(全新纯函数静态类) `PaperWindow.Note.cs`(编辑菜单尾+锚、OpenCapsuleForEditing 改 internal+锚) `PaperWindow.CustomPatches.cs`(IsTableViewAvailableAtCaret+ToggleNoteTableView) 4 resx(MenuTableView) | 独立文件为主 | ✅ 已确认 |
+| P9 | Alt+O「收起/展开全部纸片（胶囊不动）」全局命令（可配置；快照只记本命令收起的纸片 id，中途手动操作被尊重；复用上游 SetCollapsedState/OpenCapsuleForEditing） | `AppController.CollapsePapers.cs`(全新分部文件) `GlobalHotkeys.cs`(enum+catalog+锚) `AppController.ExperimentalPassive.cs`(分发 1 case+锚) `Strings.cs`(标签键) | 独立文件为主 | ✅ 已确认 |
 
 已撤销并清理干净的尝试（勿再引入，含死代码已删）：
 - 右键长按拖动三代（手动位移 / 窗口级捕获死锁 / 借 chrome 会话僵死）；
 - Alt+左键拖动（预览态直拖覆盖后冗余，连同 captureSource 参数体系、session.CaptureSource 字段、MoveWindowDevicePositionAsync 一并删除）；
 - 空白双击全屏（与拖动/进编辑共享按下入口的结构性竞争，改用 F11）；
 - 编辑态右键菜单沉浸切换（失焦后预览态右键即可）；
-- 背景独立透明通道（SkinBorder 合成渲染多层叠加，覆盖底层画刷无视觉效果；等上游 4.0 材质透明度，届时 Alt+滚轮可作其快捷键预留）。
+- 背景独立透明通道（SkinBorder 合成渲染多层叠加，覆盖底层画刷无视觉效果；等上游 4.0 材质透明度，届时 Alt+滚轮可作其快捷键预留）；
+- 顶栏「◐」透明度按钮（Shift+滚轮为主入口后冗余，含 Popup 机制与 ToolTip 字符串全删）；
+- 粘贴自动转表格（有损单向变换：原始 GFM 表格源码丢失、导出链路断；改为 P8 显式临时转换，粘贴原样）；
+- 占位胶囊背景色区分（上游默认皮肤下无材质差异，但 DockedActive 表面常驻右侧 × 已可区分——上游现成行为，不补丁）。
 
 ## 三、冲突裁决规则（rebase upstream/main 时按序执行）
 
@@ -45,7 +51,8 @@
 - 使用 exe：`D:\userdata\shiwenbin\software\portable\paperTodo\PaperTodo-dev-custom.exe`（快捷方式 `shortcut\paper.lnk` 指向它，更新只换文件不动 lnk）；
 - 官方原版归档：`official-backup\`；数据备份：`backup-20261103\`；
 - `data.json` 持久化会**覆盖代码默认值**——升级后「设置不生效」先查 data.json 存的旧值（实例：maxTitleLength 6 盖掉默认 32）；
-- 更新流程（严格顺序）：改 dev 分支 → `dotnet publish`（官方参数）→ `--exit` 退出并确认进程消失 → 替换 exe → 启动 → 验证。**改 data.json 必须在进程退出后**（运行中会写回内存值）；
+- 更新流程（严格顺序，2026-11-05 两次事故后固化）：改 dev 分支 → `dotnet publish`（官方参数）→ `--exit` 退出并**确认进程消失** → 替换 exe → **哈希校验 exe 真的换了**（时间戳/字节不可靠，cp 可能被进程锁静默吞掉）→ 启动 → 验证；
+- **data.json 纪律**（三层）：①改值必须在进程退出后（运行中会写回内存值盖掉）；②**新增命令/设置键必须在「含该键代码的 exe」启动前写入**（旧 exe 的 NormalizeBindings 归一化保存会把不认识的键从字典剔除——静默丢配置）；③写完等一个保存周期回读确认存活（启动后 ≥10s 回查）；
 - 胶囊上下磁吸：上游实验功能已支持（拖悬浮胶囊靠任意屏幕边/窗口边吸附），开关=设置-实验室-「边缘磁吸胶囊」；贴边队列仍为左右（#383 作者：上下「难点是交互逻辑没想法」）；
 - 重建命令：`dotnet publish ./PaperTodo.csproj -c Release -r win-x64 --self-contained true -o ./release_local -p:PublishSingleFile=true -p:PublishReadyToRun=false -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:PublishTrimmed=false -p:EmbedAllSources=false -p:EmbedUntrackedSources=false -p:DebugType=none -p:DebugSymbols=false`；
 - 同步上游：`git fetch upstream && git rebase upstream/main dev` → 按上表裁决 → `dotnet build -c Release` 验证 → push `origin HEAD:refs/heads/dev` → publish 替换 exe → 重启。
