@@ -3,7 +3,11 @@ name: Release
 on:
   push:
     tags:
-      - "v*"
+      # Custom patch (dev branch): upstream's release pipeline is disabled on this fork —
+      # custom-release.yml owns v* tags with the fork's asset layout (multi-file ZIP +
+      # single-file exe + OTA manifest). Keep only a non-matching pattern so an accidental
+      # upstream sync never double-publishes.
+      - "upstream-release-disabled"
   workflow_dispatch:
     inputs:
       release_tag:

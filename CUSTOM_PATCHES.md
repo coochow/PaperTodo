@@ -26,6 +26,7 @@
 | P7 | 设置→「关于」页（版本号+定制构建说明+使用手册单链接，指向 fork 的 CUSTOM_FEATURES.md；预留未来检查更新/OTA） | `AppController.Settings.About.cs`(全新分部文件) `AppController.Settings.cs`(枚举+About+锚) `AppController.SettingsSidebar.cs`(导航项+路由+锚) | 独立文件为主 | ✅ 已确认 |
 | P8 | 编辑器右键「表格视图（临时）」：光标在 GFM 管道表格内可用（菜单 Opened 时按光标动态置灰），转换为 CJK 感知等宽对齐代码块，Ctrl+Z 一步还原原始表格；粘贴永远原样（数据零损失） | `MarkdownTablePaste.cs`(全新纯函数静态类) `PaperWindow.Note.cs`(编辑菜单尾+锚、OpenCapsuleForEditing 改 internal+锚) `PaperWindow.CustomPatches.cs`(IsTableViewAvailableAtCaret+ToggleNoteTableView) 4 resx(MenuTableView) | 独立文件为主 | ✅ 已确认 |
 | P9 | Alt+O「收起/展开全部纸片（胶囊不动）」全局命令（可配置；快照只记本命令收起的纸片 id，中途手动操作被尊重；复用上游 SetCollapsedState/OpenCapsuleForEditing） | `AppController.CollapsePapers.cs`(全新分部文件) `GlobalHotkeys.cs`(enum+catalog+锚) `AppController.ExperimentalPassive.cs`(分发 1 case+锚) `Strings.cs`(标签键) | 独立文件为主 | ✅ 已确认 |
+| P10 | 版本发布 + 检查更新/OTA：fork 版本号独立序列（1.0.0 起）；GitHub Release 由 `custom-release.yml`（push v* tag 触发）构建双资产（multi-file ZIP 推荐 + 单文件 exe）+ manifest.json + delta 包；应用内关于页手动检查 + 启动静默检查（气泡）；增量升级 = 本地 SHA256 比对 → delta 包或全量 ZIP → 校验 → `.old` 改名换文件 → 重启（复用 RequestRestartAfterExit） | `src/UpdateService.cs`(全新文件) `AppController.Settings.About.cs`(扩展) `AppController.cs`(StartAsync 挂启动检查+锚) `Models.cs`(UpdateCheckEnabled 字段+锚) `AppController.SettingsApi.Catalog.cs`(1 setting+锚) `Strings.cs`(3 键+锚) `PaperTodo.csproj`(Version→1.0.0+锚) `.github/workflows/custom-release.yml`(全新) `.github/workflows/release.yml`(禁上游 tag 触发+锚) | 独立文件为主 | 🆕 待用户确认 |
 
 已撤销并清理干净的尝试（勿再引入，含死代码已删）：
 - 右键长按拖动三代（手动位移 / 窗口级捕获死锁 / 借 chrome 会话僵死）；
@@ -42,6 +43,7 @@
 1. **`PaperWindow.CustomPatches.cs` / 新文件**：几乎不会冲突。挂载点（BuildShell/BuildBody 尾部 1-3 行、Todo.cs 键盘头部、Note.cs 预览分支）冲突时保双方——上游行在前、`// Custom patch` 行在后；
 2. **`PaperTitles.cs`**：上游若改标题逻辑，**优先采上游**，然后重套两个改动：`DefaultMaxTitleLength=32`、全宽当量计数（ElementWidth/FullWidthEquivalents/EastAsianWidthCategory 整段可独立粘贴，只依赖 `StringInfo`）；
 3. **`RefreshExperimentalOpacity`（PaperWindow.Experimental.cs）**：上游若重构透明度链，采上游结构后重插 persistent 分支：优先级 `IsAdvancedPaperTransparent > persistent(不折叠) > inactive 旧逻辑`；
+3b. **`.github/workflows/release.yml`**：上游若改其触发结构，保留我们的禁用锚（tag 触发改为永不满 足的 `upstream-release-disabled` 模式）——fork 的发布只走 `custom-release.yml`；上游的 workflow 内容变化照常合入，不影响禁用锚。
 4. **`Models.cs` / `AppController.Settings*.cs` / `Strings.cs` / resx**：纯增量（新字段/新 setting/新键/新 data 块），冲突时 union 全保留。若上游也加了 `MenuHideTopBar/MenuShowTopBar`（issue #384），**删我们的同名块用上游的**；
 5. **`PaperWindow.ExperimentalFocusPresentation.cs`**：上游若重构失焦呈现，我们的方法组（Manual TopBar 系列）可整段搬移，仅依赖 `_paperChrome.SetHeaderOpacity/SetHeaderExtent`、`_shell.RowDefinitions[0]`、`_topBarHost` 三个稳定接口；最大化补偿块（hidden 判定+负 Margin）在 RefreshManualTopBarHiddenPresentation 内，整体搬；
 6. **`PaperWindow.cs` / `Capsule.cs` / `Note.cs` / `Todo.cs` 内的插入块**：均为带锚注释的独立小块，冲突时保双方；上游方法改名时把我们的块移到新方法同名位置。Note.cs 的插入点在 noteMouseDown 预览分支 `TryGetOpenableLinkFromTextViewPoint` 之后、进编辑之前——上游若重排该函数，按此逻辑位置重新插入。
@@ -59,6 +61,8 @@
 
 ## 五、待办 / 已知问题
 
+- [ ] P10 发布流程首次实跑验证：push `v1.0.0` tag → 确认 Actions 构建 + Release 创建 + manifest/delta 资产齐全 → 本地关于页「检查更新」→ 实际升级一轮（含 `.old` 清理回验）；
+- [ ] P10 后续发布口令：「发布新版本」= 改 `PaperTodo.csproj` Version → commit → tag `v<版本>` → push tag（触发 custom-release.yml 全自动）；OTA 用户在应用内即可检测并增量升级；
 - [ ] 上游发布 4.0 正式版：执行首次 rebase（fork 点 411078b 落后上游已较多；预期冲突点 `PaperTitles.cs`/`RefreshExperimentalOpacity`/`Note.cs` noteMouseDown，按裁决规则 2/3/6 处理）；
 - [ ] issue #384 若作者实现同类标题逻辑：撤 P3；#383 上下停靠若作者想通交互：直接用上游；
 - [ ] 上游 4.0 材质透明度落地后：评估撤 P1/P6（改用材质透明度），并把 Alt+滚轮接为其快捷键。

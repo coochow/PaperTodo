@@ -80,7 +80,11 @@ public static class Strings
             ["TodoPasteItemLimitMessage"] = ["本次最多插入前 {0} 条待办，其余未插入。", "Only the first {0} todos were inserted; the rest were not inserted.", "先頭の {0} 件だけを挿入し、残りは挿入しませんでした。", "앞의 {0}개 할 일만 삽입했고 나머지는 삽입하지 않았습니다."],
             ["TodoPasteTextLimitMessage"] = ["待办最多支持 {0} 个字符，超出部分未插入。", "A todo can contain at most {0} characters; excess text was not inserted.", "ToDo は最大 {0} 文字です。超えた部分は挿入しませんでした。", "할 일은 최대 {0}자까지 지원하며 초과한 텍스트는 삽입하지 않았습니다."],
             ["NoteInputLimitTitle"] = ["笔记已达上限", "Note limit reached", "ノートの上限に達しました", "메모 한도에 도달했습니다"],
-            ["NoteInputLimitMessage"] = ["笔记最多支持 {0} 个字符。请删除部分内容后再继续输入。", "A note can contain at most {0} characters. Delete some content before typing more.", "ノートは最大 {0} 文字です。続けて入力するには一部の内容を削除してください。", "메모는 최대 {0}자까지 입력할 수 있습니다. 계속 입력하려면 일부 내용을 삭제해 주세요."]
+            ["NoteInputLimitMessage"] = ["笔记最多支持 {0} 个字符。请删除部分内容后再继续输入。", "A note can contain at most {0} characters. Delete some content before typing more.", "ノートは最大 {0} 文字です。続けて入力するには一部の内容を削除してください。", "메모는 최대 {0}자까지 입력할 수 있습니다. 계속 입력하려면 일부 내용을 삭제해 주세요."],
+            // Custom patch (dev branch): update check / OTA strings.
+            ["UpdateAvailableTitle"] = ["PaperTodo 可更新", "PaperTodo update available", "PaperTodo のアップデート", "PaperTodo 업데이트"],
+            ["UpdateAvailableMessage"] = ["新版本 v{0} 已发布，点击查看并升级。", "Version v{0} is available. Click to review and update.", "新バージョン v{0} が利用可能です。クリックして確認・更新します。", "새 버전 v{0}이(가) 있습니다. 클릭해 확인하고 업데이트하세요."],
+            ["UpdateCheckEnabled"] = ["启动时自动检查更新", "Check for updates at startup", "起動時にアップデートを確認", "시작 시 업데이트 확인"]
         };
 
     public static string Get(string key)

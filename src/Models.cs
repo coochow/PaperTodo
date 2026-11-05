@@ -482,6 +482,11 @@ public sealed class AppState
     public string TextRenderingProfile { get; set; } = TextRenderingProfiles.Standard;
     public bool AdvancedSettingsMode { get; set; }
     public bool TelemetryEnabled { get; set; } = true;
+    // Custom patch (dev branch): automatic update check against the fork's GitHub
+    // releases. Defaults to enabled so other users learn about new versions; the
+    // About page surfaces failures silently (offline stays silent).
+    // No WhenWritingDefault here: like TelemetryEnabled, the "off" choice must persist.
+    public bool UpdateCheckEnabled { get; set; } = true;
     /// <summary>
     /// When a custom papertodo font is present, bold styles load papertodo_bold / PaperTodo_Bold instead of synthetic SemiBold.
     /// </summary>

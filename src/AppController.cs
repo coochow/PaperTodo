@@ -231,6 +231,15 @@ public sealed partial class AppController : IDisposable
         CreateTrayIcon();
         InitializeGlobalHotkeys();
         _ = Task.Run(PaperWindow.CleanupOldScriptCapsuleTempFiles);
+        // Custom patch (dev branch): clean up files parked by a previous in-app update
+        // and, when enabled, run the silent startup update check.
+        _ = Task.Run(UpdateService.CleanupLeftoverUpdateFiles);
+        if (State.UpdateCheckEnabled && _trayIcon is { } trayIcon)
+        {
+            _ = Application.Current.Dispatcher.BeginInvoke(
+                () => { if (!IsExiting) UpdateService.ScheduleStartupCheck(Application.Current.Dispatcher, trayIcon); },
+                DispatcherPriority.SystemIdle);
+        }
         _ = Application.Current.Dispatcher.BeginInvoke(
             () => { if (!IsExiting) PaperWindow.EnsurePersistentScriptProcessForSettings(State); },
             DispatcherPriority.SystemIdle);

@@ -558,6 +558,12 @@ public sealed partial class AppController
             value => State.McpAllowDeletes = value,
             SettingEffects.Mcp,
             title: Strings.Get("LabsMcpDeletes"));
+        // Custom patch (dev branch): automatic update check toggle (About page).
+        yield return DefineSetting<bool>("updates.auto_check_enabled",
+            () => State.UpdateCheckEnabled,
+            value => State.UpdateCheckEnabled = value,
+            SettingEffects.None,
+            title: Strings.Get("UpdateCheckEnabled"));
         foreach (var definition in CreateExternalSettingsCatalog()) yield return definition;
         foreach (var definition in CreateShortcutSettingsCatalog()) yield return definition;
     }

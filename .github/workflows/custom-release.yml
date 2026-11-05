@@ -1,0 +1,265 @@
+# Custom patch (dev branch): fork release pipeline.
+# The fork publishes its own releases; the upstream release.yml would double-build
+# the wrong asset layout on the same tag push, so it stays tag-push disabled
+# (see the anchored edit in .github/workflows/release.yml).
+#
+# Pushing a v* tag on dev (or dispatching with an existing tag) builds the two
+# user-facing packages — multi-file ZIP as the recommended download, single-file
+# self-contained exe as the portable fallback — generates a SHA-256 manifest for
+# the incremental OTA client, and publishes a GitHub Release with all three assets.
+name: Custom Release
+
+on:
+  push:
+    branches:
+      - dev
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要发布的 tag（例如 v1.0.0，必须已存在）"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: custom-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # Only a tag push (or an explicit dispatch naming one) actually publishes;
+    # plain dev-branch pushes skip the job entirely.
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    name: Build and publish custom release
+    runs-on: windows-latest
+    timeout-minutes: 40
+
+    defaults:
+      run:
+        shell: pwsh
+
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "true"
+
+    steps:
+      - name: Resolve tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          $tag = if ($env:INPUT_TAG) { $env:INPUT_TAG } else { "$env:GITHUB_REF_NAME" }
+          if (-not $tag -or $tag -notmatch '^v[0-9]') {
+            throw "Release requires an existing tag like v1.0.0; got '$tag'."
+          }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$($tag.TrimStart('v'))" >> $env:GITHUB_OUTPUT
+
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Verify project version matches tag
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          $project = [xml](Get-Content -LiteralPath .\PaperTodo.csproj -Raw)
+          $versionNodes = $project.SelectNodes('/Project/PropertyGroup/Version')
+          if ($versionNodes.Count -ne 1) {
+            throw "PaperTodo.csproj must define exactly one <Version> element (found $($versionNodes.Count))."
+          }
+          $projectVersion = ([string]$versionNodes[0].InnerText).Trim()
+          if ($projectVersion -ne $env:VERSION) {
+            throw "PaperTodo.csproj Version '$projectVersion' does not match tag '$env:VERSION'. Bump the project version before tagging."
+          }
+
+      - name: Rebuild native LMDB library
+        run: .\native\lmdb\build.ps1 -Configuration Release -ForceRebuild
+
+      - name: Restore
+        run: dotnet restore .\PaperTodo.csproj -r win-x64
+
+      - name: Publish multi-file package (self-contained)
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          $publishDir = Join-Path $env:RUNNER_TEMP "papertodo-multi"
+          Remove-Item -LiteralPath $publishDir -Recurse -Force -ErrorAction SilentlyContinue
+          dotnet publish .\PaperTodo.csproj `
+            -c Release -r win-x64 --self-contained true --no-restore `
+            -o $publishDir `
+            /p:PublishSingleFile=false `
+            /p:PublishReadyToRun=false `
+            /p:IncludeNativeLibrariesForSelfExtract=false `
+            /p:PublishTrimmed=false `
+            /p:EmbedAllSources=false `
+            /p:EmbedUntrackedSources=false `
+            /p:DebugType=none `
+            /p:DebugSymbols=false
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          # Users unzip next to their data; ship only what the app needs to run.
+          Get-ChildItem -LiteralPath $publishDir -Recurse -Include *.pdb,*.xml |
+            Where-Object { $_.FullName -notmatch '\\runtimes\\' } |
+            Remove-Item -Force
+
+          $packageDir = "package"
+          New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
+          $zipName = "PaperTodo-v$($env:VERSION)-win-x64-multi-file.zip"
+          Compress-Archive -Path (Join-Path $publishDir "*") -DestinationPath (Join-Path $packageDir $zipName) -CompressionLevel Optimal
+          Get-Item -LiteralPath (Join-Path $packageDir $zipName) | Format-Table Name, Length
+
+      - name: Publish single-file package (self-contained)
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          $publishDir = Join-Path $env:RUNNER_TEMP "papertodo-single"
+          Remove-Item -LiteralPath $publishDir -Recurse -Force -ErrorAction SilentlyContinue
+          dotnet publish .\PaperTodo.csproj `
+            -c Release -r win-x64 --self-contained true --no-restore `
+            -o $publishDir `
+            /p:PublishSingleFile=true `
+            /p:PublishReadyToRun=false `
+            /p:IncludeNativeLibrariesForSelfExtract=true `
+            /p:EnableCompressionInSingleFile=true `
+            /p:PublishTrimmed=false `
+            /p:EmbedAllSources=false `
+            /p:EmbedUntrackedSources=false `
+            /p:DebugType=none `
+            /p:DebugSymbols=false
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $packageDir = "package"
+          $exeName = "PaperTodo-v$($env:VERSION)-win-x64-single-file-self-contained.exe"
+          Copy-Item -LiteralPath (Join-Path $publishDir "PaperTodo.exe") -DestinationPath (Join-Path $packageDir $exeName)
+          Get-Item -LiteralPath (Join-Path $packageDir $exeName) | Format-Table Name, Length
+
+      - name: Generate OTA manifest and delta bundle
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The manifest hashes the MULTI-FILE layout: that is what the OTA client
+          # compares against. The delta bundle carries only files whose hash differs
+          # from the previous release (plus new files), so an up-to-date user downloads
+          # megabytes, not the full package.
+          $publishDir = Join-Path $env:RUNNER_TEMP "papertodo-multi"
+          $files = Get-ChildItem -LiteralPath $publishDir -Recurse -File |
+            ForEach-Object {
+              $relative = [IO.Path]::GetRelativePath($publishDir, $_.FullName)
+              [ordered]@{
+                path = $relative.Replace('/', '\')
+                size = $_.Length
+                sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              }
+            } | Sort-Object { $_.path }
+
+          $delta = $null
+          $previousManifestJson = $null
+          gh release view --repo $env:GITHUB_REPOSITORY --json tagName,assets *> $null
+          if ($LASTEXITCODE -eq 0) {
+            $previous = gh release view --repo $env:GITHUB_REPOSITORY --json tagName,assets | ConvertFrom-Json
+            $hasPreviousManifest = @($previous.assets) | Where-Object { $_.name -eq "manifest.json" }
+            if ($hasPreviousManifest) {
+              $previousTag = $previous.tagName
+              gh release download $previousTag --repo $env:GITHUB_REPOSITORY --pattern manifest.json --output previous-manifest.json --clobber
+              if ($LASTEXITCODE -eq 0) {
+                $previousManifestJson = Get-Content -LiteralPath previous-manifest.json -Raw | ConvertFrom-Json
+              }
+            }
+          }
+
+          if ($previousManifestJson) {
+            $previousFiles = @{}
+            foreach ($f in $previousManifestJson.files) { $previousFiles[$f.path] = $f.sha256 }
+            $changed = @($files | Where-Object { -not $previousFiles.ContainsKey($_.path) -or $previousFiles[$_.path] -ne $_.sha256 })
+            $deleted = @($previousFiles.Keys | Where-Object { $files.path -notcontains $_ })
+            if ($changed.Count -gt 0) {
+              $deltaRoot = Join-Path $env:RUNNER_TEMP "papertodo-delta"
+              New-Item -ItemType Directory -Force -Path $deltaRoot | Out-Null
+              foreach ($f in $changed) {
+                $source = Join-Path $publishDir ($f.path.Replace('\', '/'))
+                $dest = Join-Path $deltaRoot ($f.path.Replace('\', '/'))
+                New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
+                Copy-Item -LiteralPath $source -Destination $dest
+              }
+              $deltaAsset = "delta-from-v$($previousManifestJson.version).zip"
+              Compress-Archive -Path (Join-Path $deltaRoot "*") -DestinationPath (Join-Path "package" $deltaAsset) -CompressionLevel Optimal
+              $delta = [ordered]@{
+                from = $previousManifestJson.version
+                asset = $deltaAsset
+                files = @($changed | ForEach-Object { $_.path })
+                deleted = $deleted
+              }
+              Write-Host "Delta bundle: $($changed.Count) changed, $($deleted.Count) deleted."
+            } else {
+              Write-Host "No file changed since v$($previousManifestJson.version); no delta bundle."
+            }
+          } else {
+            Write-Host "No previous release manifest found; first release ships without a delta bundle."
+          }
+
+          $manifest = [ordered]@{
+            version = $env:VERSION
+            channel = "stable"
+            packaging = "multi-file"
+            files = $files
+            delta = $delta
+          }
+          # UTF8 without BOM: the in-app parser tolerates a BOM, but keep it clean anyway.
+          $manifest | ConvertTo-Json -Depth 5 | ForEach-Object { $_ -replace "`r`n", "`n" } |
+            Set-Content -LiteralPath (Join-Path "package" "manifest.json") -Encoding utf8NoBOM
+          Get-Content -LiteralPath (Join-Path "package" "manifest.json") -TotalCount 20
+
+      - name: Build release notes
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          # Fork releases carry a compact bilingual header plus the custom-features link.
+          # Upstream's release_notes.py changelog extraction does not apply to the fork's
+          # independent version sequence.
+          $version = $env:TAG.TrimStart('v')
+          $notes = @"
+          ## Custom build release
+          个人定制构建（基于上游 PaperTodo，定制功能说明见仓库 [CUSTOM_FEATURES.md](https://github.com/coochow/PaperTodo/blob/dev/CUSTOM_FEATURES.md)）。
+
+          ### 下载 / Downloads
+          - **PaperTodo-v$version-win-x64-multi-file.zip** — 推荐下载：多文件 self-contained 包（内置 .NET 运行时，解压即用，无需安装任何依赖）。
+          - **PaperTodo-v$version-win-x64-single-file-self-contained.exe** — 单文件便携版（同样内置运行时，一个 exe 走天下）。
+
+          > 在应用内「设置 → 关于 → 检查更新」可自动增量升级（基于 multi-file 包，只下载有变化的文件）。
+          "@
+          $notes -replace "`r`n", "`n" | Set-Content -LiteralPath release-notes.md -Encoding utf8NoBOM
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          $assets = @(
+            "package/PaperTodo-v$($env:VERSION)-win-x64-multi-file.zip",
+            "package/PaperTodo-v$($env:VERSION)-win-x64-single-file-self-contained.exe",
+            "package/manifest.json"
+          )
+          if (Test-Path -LiteralPath (Join-Path "package" "delta-from-v*.zip")) {
+            $assets += (Get-Item "package/delta-from-v*.zip").FullName
+          }
+          gh release create $env:TAG `
+            --repo $env:GITHUB_REPOSITORY `
+            --target $env:GITHUB_SHA `
+            --title "PaperTodo $env:TAG (custom build)" `
+            --notes-file release-notes.md `
+            @assets
