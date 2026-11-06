@@ -118,7 +118,7 @@ jobs:
           $packageDir = "package"
           New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
           $zipName = "PaperTodo-v$($env:VERSION)-win-x64-multi-file.zip"
-          Compress-Archive -Path (Join-Path $publishDir "*") -DestinationPath (Join-Path $packageDir $zipName) -CompressionLevel Optimal
+          Compress-Archive -Path (Join-Path $publishDir "*") -Destination (Join-Path $packageDir $zipName) -CompressionLevel Optimal
           Get-Item -LiteralPath (Join-Path $packageDir $zipName) | Format-Table Name, Length
 
       - name: Publish single-file package (self-contained)
@@ -143,7 +143,9 @@ jobs:
 
           $packageDir = "package"
           $exeName = "PaperTodo-v$($env:VERSION)-win-x64-single-file-self-contained.exe"
-          Copy-Item -LiteralPath (Join-Path $publishDir "PaperTodo.exe") -DestinationPath (Join-Path $packageDir $exeName)
+          # pwsh accepts both -Destination and -DestinationPath; Windows PowerShell 5.1
+          # only knows -Destination, so use the universally valid spelling.
+          Copy-Item -LiteralPath (Join-Path $publishDir "PaperTodo.exe") -Destination (Join-Path $packageDir $exeName)
           Get-Item -LiteralPath (Join-Path $packageDir $exeName) | Format-Table Name, Length
 
       - name: Generate OTA manifest and delta bundle
@@ -196,7 +198,7 @@ jobs:
                 Copy-Item -LiteralPath $source -Destination $dest
               }
               $deltaAsset = "delta-from-v$($previousManifestJson.version).zip"
-              Compress-Archive -Path (Join-Path $deltaRoot "*") -DestinationPath (Join-Path "package" $deltaAsset) -CompressionLevel Optimal
+              Compress-Archive -Path (Join-Path $deltaRoot "*") -Destination (Join-Path "package" $deltaAsset) -CompressionLevel Optimal
               $delta = [ordered]@{
                 from = $previousManifestJson.version
                 asset = $deltaAsset
