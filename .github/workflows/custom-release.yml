@@ -171,13 +171,22 @@ jobs:
           $delta = $null
           $previousManifestJson = $null
           gh release view --repo $env:GITHUB_REPOSITORY --json tagName,assets *> $null
-          if ($LASTEXITCODE -eq 0) {
+          # A missing release is an expected probe outcome, not a step failure. Clear the
+          # stale exit code right away: GitHub's pwsh wrapper ends the whole step with
+          # "exit $LASTEXITCODE", so an unreset failed probe would fail the step even
+          # though every later command succeeded.
+          $probeOk = ($LASTEXITCODE -eq 0)
+          $global:LASTEXITCODE = 0
+          if ($probeOk) {
             $previous = gh release view --repo $env:GITHUB_REPOSITORY --json tagName,assets | ConvertFrom-Json
+            $global:LASTEXITCODE = 0
             $hasPreviousManifest = @($previous.assets) | Where-Object { $_.name -eq "manifest.json" }
             if ($hasPreviousManifest) {
               $previousTag = $previous.tagName
               gh release download $previousTag --repo $env:GITHUB_REPOSITORY --pattern manifest.json --output previous-manifest.json --clobber
-              if ($LASTEXITCODE -eq 0) {
+              $downloadOk = ($LASTEXITCODE -eq 0)
+              $global:LASTEXITCODE = 0
+              if ($downloadOk) {
                 $previousManifestJson = Get-Content -LiteralPath previous-manifest.json -Raw | ConvertFrom-Json
               }
             }
