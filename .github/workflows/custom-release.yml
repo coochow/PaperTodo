@@ -265,8 +265,11 @@ jobs:
             "package/PaperTodo-v$($env:VERSION)-win-x64-single-file-self-contained.exe",
             "package/manifest.json"
           )
-          if (Test-Path -LiteralPath (Join-Path "package" "delta-from-v*.zip")) {
-            $assets += (Get-Item "package/delta-from-v*.zip").FullName
+          # -LiteralPath does not expand wildcards (Test-Path would always return False);
+          # use -Path so the delta glob actually matches when a bundle exists.
+          $deltaAssets = @(Get-ChildItem -Path "package/delta-from-v*.zip" -ErrorAction SilentlyContinue)
+          if ($deltaAssets.Count -gt 0) {
+            $assets += $deltaAssets.FullName
           }
           gh release create $env:TAG `
             --repo $env:GITHUB_REPOSITORY `
