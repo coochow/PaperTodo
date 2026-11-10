@@ -3,10 +3,12 @@
 # the wrong asset layout on the same tag push, so it stays tag-push disabled
 # (see the anchored edit in .github/workflows/release.yml).
 #
-# Pushing a v* tag on dev (or dispatching with an existing tag) builds the two
-# user-facing packages — multi-file ZIP as the recommended download, single-file
-# self-contained exe as the portable fallback — generates a SHA-256 manifest for
-# the incremental OTA client, and publishes a GitHub Release with all three assets.
+# Pushing a v* tag on dev (or dispatching with an existing tag) builds the single
+# user-facing package — a multi-file self-contained ZIP wrapped in one top-level
+# PaperTodo/ folder with a Chinese "run me" note at the top — plus the SHA-256
+# manifest for the incremental OTA client and, when a previous release exists,
+# a delta bundle. The single-file exe asset was dropped: same ~77 MB as the ZIP,
+# no incremental upgrade path, and the ZIP structure now solves first-run discovery.
 name: Custom Release
 
 on:
@@ -117,36 +119,37 @@ jobs:
 
           $packageDir = "package"
           New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
+
+          # One top-level folder inside the ZIP: after "extract all" the user gets a
+          # single PaperTodo directory instead of ~300 loose files. The "!" prefix keeps
+          # the run-me note sorted first in Explorer; UTF-8 BOM keeps Notepad happy.
+          # The note is NOT part of the OTA manifest (added below the manifest scan).
+          $noteName = "!双击启动 PaperTodo.txt"
+          $noteBody = @(
+            "PaperTodo 个人定制构建",
+            "──────────────────────────",
+            "启动：双击本文件夹内的 PaperTodo.exe",
+            "     （已内置完整运行环境，无需安装任何依赖）",
+            "",
+            "升级：设置 → 关于 → 检查更新（自动增量下载）",
+            "",
+            "建议解压到任意文件夹后使用，数据保存在程序目录。"
+          ) -join "`n"
+          [IO.File]::WriteAllText((Join-Path $publishDir $noteName), $noteBody + "`n",
+            [System.Text.UTF8Encoding]::new($true))
+
           $zipName = "PaperTodo-v$($env:VERSION)-win-x64-multi-file.zip"
-          Compress-Archive -Path (Join-Path $publishDir "*") -Destination (Join-Path $packageDir $zipName) -CompressionLevel Optimal
+          # Compress the DIRECTORY itself (not its contents): "dir/*" produces flat
+          # root entries, while "dir" nests everything under PaperTodo\ — one top-level
+          # folder after extraction.
+          # Copy-Item must use -Path here: -LiteralPath does not expand the "*" glob
+          # and would silently copy nothing (same trap as Test-Path -LiteralPath).
+          $zipRoot = Join-Path $env:RUNNER_TEMP "papertodo-ziproot\PaperTodo"
+          Remove-Item -LiteralPath (Join-Path $env:RUNNER_TEMP "papertodo-ziproot") -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $zipRoot | Out-Null
+          Copy-Item -Path (Join-Path $publishDir "*") -Destination $zipRoot -Recurse
+          Compress-Archive -Path $zipRoot -Destination (Join-Path $packageDir $zipName) -CompressionLevel Optimal
           Get-Item -LiteralPath (Join-Path $packageDir $zipName) | Format-Table Name, Length
-
-      - name: Publish single-file package (self-contained)
-        env:
-          VERSION: ${{ steps.tag.outputs.version }}
-        run: |
-          $publishDir = Join-Path $env:RUNNER_TEMP "papertodo-single"
-          Remove-Item -LiteralPath $publishDir -Recurse -Force -ErrorAction SilentlyContinue
-          dotnet publish .\PaperTodo.csproj `
-            -c Release -r win-x64 --self-contained true --no-restore `
-            -o $publishDir `
-            /p:PublishSingleFile=true `
-            /p:PublishReadyToRun=false `
-            /p:IncludeNativeLibrariesForSelfExtract=true `
-            /p:EnableCompressionInSingleFile=true `
-            /p:PublishTrimmed=false `
-            /p:EmbedAllSources=false `
-            /p:EmbedUntrackedSources=false `
-            /p:DebugType=none `
-            /p:DebugSymbols=false
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          $packageDir = "package"
-          $exeName = "PaperTodo-v$($env:VERSION)-win-x64-single-file-self-contained.exe"
-          # pwsh accepts both -Destination and -DestinationPath; Windows PowerShell 5.1
-          # only knows -Destination, so use the universally valid spelling.
-          Copy-Item -LiteralPath (Join-Path $publishDir "PaperTodo.exe") -Destination (Join-Path $packageDir $exeName)
-          Get-Item -LiteralPath (Join-Path $packageDir $exeName) | Format-Table Name, Length
 
       - name: Generate OTA manifest and delta bundle
         env:
@@ -156,9 +159,12 @@ jobs:
           # The manifest hashes the MULTI-FILE layout: that is what the OTA client
           # compares against. The delta bundle carries only files whose hash differs
           # from the previous release (plus new files), so an up-to-date user downloads
-          # megabytes, not the full package.
+          # megabytes, not the full package. The "!" run-me note must stay out of the
+          # manifest: it exists only in the ZIP, and older clients reject unknown payload
+          # entries — the client strips the PaperTodo/ prefix and skips unlisted files.
           $publishDir = Join-Path $env:RUNNER_TEMP "papertodo-multi"
           $files = Get-ChildItem -LiteralPath $publishDir -Recurse -File |
+            Where-Object { $_.Name -ne "!双击启动 PaperTodo.txt" } |
             ForEach-Object {
               $relative = [IO.Path]::GetRelativePath($publishDir, $_.FullName)
               [ordered]@{
@@ -247,10 +253,9 @@ jobs:
           个人定制构建（基于上游 PaperTodo，定制功能说明见仓库 [CUSTOM_FEATURES.md](https://github.com/coochow/PaperTodo/blob/dev/CUSTOM_FEATURES.md)）。
 
           ### 下载 / Downloads
-          - **PaperTodo-v$version-win-x64-multi-file.zip** — 推荐下载：多文件 self-contained 包（内置 .NET 运行时，解压即用，无需安装任何依赖）。
-          - **PaperTodo-v$version-win-x64-single-file-self-contained.exe** — 单文件便携版（同样内置运行时，一个 exe 走天下）。
+          - **PaperTodo-v$version-win-x64-multi-file.zip** — 唯一发布包：内置 .NET 运行时，解压得到一个 PaperTodo 文件夹，双击其中的 PaperTodo.exe 即用，无需安装任何依赖。
 
-          > 在应用内「设置 → 关于 → 检查更新」可自动增量升级（基于 multi-file 包，只下载有变化的文件）。
+          > 日常升级请在应用内「设置 → 关于 → 检查更新」完成，只下载有变化的文件（增量约 1-2 MB）。
           "@
           $notes -replace "`r`n", "`n" | Set-Content -LiteralPath release-notes.md -Encoding utf8NoBOM
 
@@ -262,7 +267,6 @@ jobs:
         run: |
           $assets = @(
             "package/PaperTodo-v$($env:VERSION)-win-x64-multi-file.zip",
-            "package/PaperTodo-v$($env:VERSION)-win-x64-single-file-self-contained.exe",
             "package/manifest.json"
           )
           # -LiteralPath does not expand wildcards (Test-Path would always return False);

@@ -84,7 +84,6 @@ internal static class UpdateService
         public required string ReleaseUrl { get; init; }
         public required string Manifest { get; init; }
         public required string MultiFileZipUrl { get; init; }
-        public required string SingleFileExeUrl { get; init; }
         public string? DeltaZipUrl { get; init; }
         public required string ReleaseNotes { get; init; }
     }
@@ -222,13 +221,12 @@ internal static class UpdateService
             return null;
         }
 
+        // The ZIP is the only published package. Releases before the asset slim-down
+        // also carried a single-file exe, but the client no longer requires or uses it.
         var zipUrl = assetUrls.FirstOrDefault(kv =>
             kv.Key.StartsWith("PaperTodo-v", StringComparison.OrdinalIgnoreCase) &&
             kv.Key.EndsWith("-win-x64-multi-file.zip", StringComparison.OrdinalIgnoreCase));
-        var exeUrl = assetUrls.FirstOrDefault(kv =>
-            kv.Key.StartsWith("PaperTodo-v", StringComparison.OrdinalIgnoreCase) &&
-            kv.Key.EndsWith("-win-x64-single-file-self-contained.exe", StringComparison.OrdinalIgnoreCase));
-        if (zipUrl.Value is null || exeUrl.Value is null)
+        if (zipUrl.Value is null)
         {
             return null;
         }
@@ -239,7 +237,6 @@ internal static class UpdateService
             ReleaseUrl = GetStringProperty(release.RootElement, "html_url"),
             Manifest = manifestJson,
             MultiFileZipUrl = zipUrl.Value,
-            SingleFileExeUrl = exeUrl.Value,
             DeltaZipUrl = manifest.Delta is { } delta && !string.IsNullOrWhiteSpace(delta.Asset) &&
                           assetUrls.TryGetValue(delta.Asset, out var deltaUrl)
                 ? deltaUrl
@@ -343,7 +340,12 @@ internal static class UpdateService
     {
         if (IsSingleFileInstall)
         {
-            return await StageSingleFileAsync(info, onProgress, cancellation).ConfigureAwait(false);
+            // The single-file asset was dropped from releases: it offered no incremental
+            // path and duplicated the ZIP's size. Fail with a clear message instead of a
+            // null-URL ArgumentNullException piercing the catch filter; the About page
+            // then points the user at a manual ZIP download.
+            throw new InvalidOperationException(
+                "Single-file installs no longer support in-app updates. Please download the multi-file ZIP from the release page and replace this copy.");
         }
         return await StageBundleUpdateAsync(info, onProgress, cancellation).ConfigureAwait(false);
     }
@@ -360,18 +362,6 @@ internal static class UpdateService
         }
         Directory.CreateDirectory(root);
         return root;
-    }
-
-    private static async Task<StagedUpdate> StageSingleFileAsync(
-        UpdateInfo info,
-        Action<UpdateProgress>? onProgress,
-        CancellationToken cancellation)
-    {
-        var root = CreateStagingRoot();
-        var target = Path.Combine(root, "PaperTodo.exe");
-        await DownloadFileAsync(info.SingleFileExeUrl, target, onProgress, cancellation)
-            .ConfigureAwait(false);
-        return new StagedUpdate(root, new[] { "PaperTodo.exe" }, Array.Empty<string>());
     }
 
     private static async Task<StagedUpdate> StageBundleUpdateAsync(
@@ -401,6 +391,10 @@ internal static class UpdateService
 
         // Extract only the entries the apply step needs; verify every extracted file
         // against the manifest so a truncated or tampered payload never lands on disk.
+        // Release ZIPs nest everything under a single PaperTodo/ top folder (plus a
+        // "!" run-me note that is intentionally absent from the manifest) — strip the
+        // prefix and skip unlisted entries so both the nested and the legacy flat
+        // layouts apply identically. Delta bundles stay flat (manifest-relative).
         var applyRoot = Path.Combine(root, "apply");
         Directory.CreateDirectory(applyRoot);
         var applyFiles = new List<string>();
@@ -413,10 +407,15 @@ internal static class UpdateService
                 {
                     continue; // directory record
                 }
+                entryName = StripTopLevelFolder(entryName);
                 if (!manifestFiles.TryGetValue(entryName, out var manifestFile))
                 {
-                    throw new InvalidOperationException(
-                        $"The payload contains a file absent from the manifest: {entryName}");
+                    if (useDelta)
+                    {
+                        throw new InvalidOperationException(
+                            $"The delta payload contains a file absent from the manifest: {entryName}");
+                    }
+                    continue; // full ZIP: extra files (run-me note, changed extras) never overwrite anything
                 }
                 if (!useDelta && !missing.Contains(entryName, StringComparer.OrdinalIgnoreCase))
                 {
@@ -463,6 +462,22 @@ internal static class UpdateService
             throw new InvalidOperationException($"The payload contains an unsafe entry name: {fullName}");
         }
         return string.Join(Path.DirectorySeparatorChar, segments);
+    }
+
+    // Release ZIPs put the whole app under one "PaperTodo" top-level folder; the
+    // manifest and the install directory are prefix-free, so strip it when present.
+    // Delta bundles and pre-nesting releases match as-is (returns input unchanged).
+    private static string StripTopLevelFolder(string entryName)
+    {
+        var separator = Path.DirectorySeparatorChar;
+        var firstSep = entryName.IndexOf(separator);
+        if (firstSep <= 0)
+        {
+            return entryName;
+        }
+        return string.Equals(entryName[..firstSep], "PaperTodo", StringComparison.OrdinalIgnoreCase)
+            ? entryName[(firstSep + 1)..]
+            : entryName;
     }
 
     private static bool LocalFileMatches(ManifestFile file)
