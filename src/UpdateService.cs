@@ -29,6 +29,14 @@ internal static class UpdateService
     private const string Repository = "coochow/PaperTodo";
     private const string ReleasesApiUrl = $"https://api.github.com/repos/{Repository}/releases/latest";
     private const string ManifestAssetName = "manifest.json";
+    // Internal mirror (GitLab common_tools, comX-style latest.json). Probed FIRST:
+    // in-network users get fast downloads without touching GitHub; the mirror serves
+    // the same versioned assets (zip + manifest_<v>.json + delta zip) with hashes
+    // identical to the GitHub Release.
+    private const string InternalLatestUrl =
+        "https://gitlab.vmic.xyz/res/soft/common_tools/-/raw/master/PaperTodo/latest.json";
+    private const string InternalFileRoot =
+        "https://gitlab.vmic.xyz/res/soft/common_tools/-/raw/master/PaperTodo/File";
 
     private static readonly HttpClient Http = CreateHttpClient();
 
@@ -183,6 +191,79 @@ internal static class UpdateService
     /// <summary>Fetches the latest release manifest; returns null when up to date.</summary>
     internal static async Task<UpdateInfo?> CheckForUpdateAsync()
     {
+        // Internal mirror first: same versioned assets, faster on the intranet, and
+        // an unauthenticated raw URL (no rate limits). Falls through to GitHub on any
+        // failure (offline mirror, malformed pointer, network split).
+        var internalInfo = await TryCheckInternalMirrorAsync().ConfigureAwait(false);
+        if (internalInfo is not null)
+        {
+            return internalInfo;
+        }
+        return await CheckGitHubReleaseAsync().ConfigureAwait(false);
+    }
+
+    private static async Task<UpdateInfo?> TryCheckInternalMirrorAsync()
+    {
+        try
+        {
+            using var probe = new CancellationTokenSource(TimeSpan.FromSeconds(6));
+            var pointerJson = await Http.GetStringAsync(InternalLatestUrl, probe.Token).ConfigureAwait(false);
+            using var pointer = JsonDocument.Parse(StripBom(pointerJson));
+            var root = pointer.RootElement;
+            var version = GetStringProperty(root, "LatestVersion").Trim();
+            if (string.IsNullOrWhiteSpace(version) || !IsNewerVersion(version, CurrentVersion))
+            {
+                // Up to date per the mirror — GitHub cannot know better: both channels
+                // publish the same release. Returning null (not falling through) also
+                // keeps "no update" quiet on networks where GitHub is blocked.
+                return null;
+            }
+
+            var manifestName = GetStringProperty(root, "Manifest");
+            if (string.IsNullOrWhiteSpace(manifestName))
+            {
+                return null;
+            }
+            var manifestJson = await Http.GetStringAsync(
+                $"{InternalFileRoot}/{Uri.EscapeDataString(manifestName)}", probe.Token).ConfigureAwait(false);
+            var manifest = ParseManifest(manifestJson);
+            if (!string.Equals(manifest.Version, version, StringComparison.OrdinalIgnoreCase))
+            {
+                return null; // mirror out of sync: let GitHub decide
+            }
+
+            var zipName = GetStringProperty(root, "FileName");
+            if (string.IsNullOrWhiteSpace(zipName))
+            {
+                return null;
+            }
+            var deltaUrl = manifest.Delta is { } delta && !string.IsNullOrWhiteSpace(delta.Asset)
+                ? $"{InternalFileRoot}/{Uri.EscapeDataString(delta.Asset)}"
+                : null;
+            return new UpdateInfo
+            {
+                Version = version,
+                ReleaseUrl = $"https://gitlab.vmic.xyz/res/soft/common_tools/-/tree/master/PaperTodo",
+                Manifest = manifestJson,
+                MultiFileZipUrl = $"{InternalFileRoot}/{Uri.EscapeDataString(zipName)}",
+                DeltaZipUrl = deltaUrl,
+                ReleaseNotes = root.TryGetProperty("ReleaseNote", out var noteElement) &&
+                               noteElement.ValueKind == JsonValueKind.Object &&
+                               noteElement.TryGetProperty("zh-CN", out var zhNote) &&
+                               zhNote.ValueKind == JsonValueKind.String
+                    ? zhNote.GetString() ?? ""
+                    : ""
+            };
+        }
+        catch
+        {
+            // Mirror unreachable/malformed: fall back to GitHub silently.
+            return null;
+        }
+    }
+
+    private static async Task<UpdateInfo?> CheckGitHubReleaseAsync()
+    {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         using var release = await GetJsonAsync(ReleasesApiUrl, cts.Token).ConfigureAwait(false);
         var tag = GetStringProperty(release.RootElement, "tag_name");
@@ -250,6 +331,13 @@ internal static class UpdateService
         return element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString() ?? ""
             : "";
+    }
+
+    private static string StripBom(string json)
+    {
+        // PowerShell/file-tool authored JSON on the mirror may carry a UTF-8 BOM;
+        // JsonDocument rejects leading BOM bytes.
+        return json.Length > 0 && json[0] == '﻿' ? json[1..] : json;
     }
 
     private static ReleaseManifest ParseManifest(string json)
