@@ -121,21 +121,29 @@ jobs:
           New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
 
           # One top-level folder inside the ZIP: after "extract all" the user gets a
-          # single PaperTodo directory instead of ~300 loose files. The "!" prefix keeps
-          # the run-me note sorted first in Explorer; UTF-8 BOM keeps Notepad happy.
-          # The note is NOT part of the OTA manifest (added below the manifest scan).
-          $noteName = "!双击启动 PaperTodo.txt"
+          # single PaperTodo directory instead of ~300 loose files. Numbered guides
+          # sort to the top in Explorer: "1 启动.bat" (ASCII content, relative %~dp0
+          # launch — double-click runs the app) and "2 使用说明.txt" (UTF-8 BOM keeps
+          # Notepad happy). Guides are NOT part of the OTA manifest (excluded below).
+          [IO.File]::WriteAllText((Join-Path $publishDir "1 启动.bat"),
+            "@echo off`r`nstart `"`" `"%~dp0PaperTodo.exe`"`r`n",
+            [System.Text.ASCIIEncoding]::new())
           $noteBody = @(
             "PaperTodo 个人定制构建",
-            "──────────────────────────",
-            "启动：双击本文件夹内的 PaperTodo.exe",
-            "     （已内置完整运行环境，无需安装任何依赖）",
+            "══════════════════════════",
+            "第 1 步：双击本文件夹里的「1 启动.bat」或 PaperTodo.exe",
+            "        （已内置完整运行环境，无需安装任何东西）",
             "",
-            "升级：设置 → 关于 → 检查更新（自动增量下载）",
+            "第 2 步：日常升级 设置 → 关于 → 检查更新（自动增量，约 1-2 MB）",
             "",
-            "建议解压到任意文件夹后使用，数据保存在程序目录。"
+            "默认已启用：浅色纸张 · 纸片置顶（图钉可关）· 顶栏四个快捷按钮 · Alt+O 收起/恢复纸片 · Alt+P 隐藏/显示软件",
+            "· 笔记预览态按住正文拖动窗口；待办纸按住「＋」下方空白拖动窗口",
+            "· Shift+滚轮调当前纸片透明度（每张独立，未调过的纸保持不透明）；Ctrl+滚轮调字号",
+            "· 想跟随系统深色 → 设置→外观→主题；不想置顶 → 点图钉",
+            "",
+            "建议整个文件夹解压到任意位置后使用，数据保存在程序目录。"
           ) -join "`n"
-          [IO.File]::WriteAllText((Join-Path $publishDir $noteName), $noteBody + "`n",
+          [IO.File]::WriteAllText((Join-Path $publishDir "2 使用说明.txt"), $noteBody + "`n",
             [System.Text.UTF8Encoding]::new($true))
 
           $zipName = "PaperTodo-v$($env:VERSION)-win-x64-multi-file.zip"
@@ -164,7 +172,7 @@ jobs:
           # entries — the client strips the PaperTodo/ prefix and skips unlisted files.
           $publishDir = Join-Path $env:RUNNER_TEMP "papertodo-multi"
           $files = Get-ChildItem -LiteralPath $publishDir -Recurse -File |
-            Where-Object { $_.Name -ne "!双击启动 PaperTodo.txt" } |
+            Where-Object { $_.Name -ne "1 启动.bat" -and $_.Name -ne "2 使用说明.txt" } |
             ForEach-Object {
               $relative = [IO.Path]::GetRelativePath($publishDir, $_.FullName)
               [ordered]@{
