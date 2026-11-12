@@ -47,9 +47,28 @@ public sealed partial class PaperWindow
         };
         scrollViewer.ScrollChanged += OnTodoDragScrollChanged;
         AttachTodoBackgroundHost(scrollViewer);
+        // Custom patch (dev branch): blank-zone window drag (v3). Mounted on the body
+        // ScrollViewer itself — presses inside _todoPanel (rows/checkboxes/append bar)
+        // are excluded by the guard, and the top bar/capsule lie outside this element
+        // so the gesture can never swallow their clicks. Still release clears the
+        // selection, matching the legacy blank-click semantics.
+        scrollViewer.PreviewMouseLeftButtonDown += OnTodoBlankPreviewMouseLeftButtonDown;
         return scrollViewer;
     }
 
+
+    private void OnTodoBlankPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left ||
+            _todoSweepSelection != null ||
+            !ShouldTodoBlankPressStartWindowDrag(e.OriginalSource as DependencyObject))
+        {
+            return;
+        }
+
+        e.Handled = true;
+        BeginTodoBlankPressDragOrClear((UIElement)sender, e);
+    }
 
     public void RefreshTodoRowsForExternalChange()
     {

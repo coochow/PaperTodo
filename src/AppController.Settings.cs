@@ -207,7 +207,9 @@ public sealed partial class AppController
     private void SetExperimentalInactivePaperOpacityLevel(double opacity) =>
         SetSettingFromUi("focus.inactive_opacity", ExperimentalOpacityLevels.Normalize( opacity, ExperimentalOpacityLevels.DefaultInactivePaper));
 
-    private void ToggleExperimentalPersistentPaperOpacity() =>
+    // Custom patch (dev branch): internal for the Shift+wheel paper-window caller
+    // (auto-enable persistent opacity on first wheel use).
+    internal void ToggleExperimentalPersistentPaperOpacity() =>
         SetSettingFromUi("focus.persistent_paper_opacity_enabled", !State.ExperimentalPersistentPaperOpacity);
 
     private void SetExperimentalPersistentPaperOpacityLevel(double opacity) =>

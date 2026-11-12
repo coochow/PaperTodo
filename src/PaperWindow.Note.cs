@@ -1000,8 +1000,15 @@ public sealed partial class PaperWindow
             (modifiers & (ModifierKeys.Alt | ModifierKeys.Control)) == 0)
         {
             var step = e.Delta > 0 ? 0.05 : -0.05;
-            _controller.SetExperimentalPersistentPaperOpacityLevelFromPaper(
-                _controller.State.ExperimentalPersistentPaperOpacityLevel + step);
+            // Custom patch (dev branch): per-paper tuning (mirrors Ctrl+wheel text
+            // zoom). The wheel intent IS persistent transparency — auto-enable the
+            // feature flag on first use; the level lands on THIS paper, leaving other
+            // papers on the global default.
+            _controller.SetPaperPersistentOpacity(
+                _paper,
+                (_paper.PersistentOpacityLevel != 0
+                    ? _paper.PersistentOpacityLevel
+                    : _controller.State.ExperimentalPersistentPaperOpacityLevel) + step);
             e.Handled = true;
             return;
         }

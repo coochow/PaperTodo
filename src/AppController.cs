@@ -491,7 +491,9 @@ public sealed partial class AppController : IDisposable
             Width = type == PaperTypes.Note ? PaperLayoutDefaults.NoteDefaultWidth : PaperLayoutDefaults.TodoDefaultWidth,
             Height = type == PaperTypes.Note ? PaperLayoutDefaults.NoteDefaultHeight : PaperLayoutDefaults.TodoDefaultHeight,
             IsVisible = show,
-            AlwaysOnTop = sourcePaper?.AlwaysOnTop ?? false
+            // Custom patch (dev branch): new papers default to always-on-top; a copy
+            // inherits the source paper's pin state instead.
+            AlwaysOnTop = sourcePaper?.AlwaysOnTop ?? true
         };
         InitializeNewPaperCapsuleQueue(paper, sourcePaper, cursorMonitor?.DeviceName);
 
@@ -754,6 +756,44 @@ public sealed partial class AppController : IDisposable
         }
         NotifyPaperDisplayTitleChanged(paper.Id);
         RefreshTrayMenu();
+        MarkDirty();
+    }
+
+    // Custom patch (dev branch): per-paper persistent opacity (Shift+wheel target).
+    // A paper tuned individually keeps its own level; the global setting stays the
+    // default for untouched papers. Auto-enables the feature flag on first use and
+    // snaps the global default to fully OPAQUE (1.0) in the same breath — otherwise
+    // the upstream 0.7 default would make every untouched paper (including ones the
+    // flag-enable broadcast reaches, and every newly created paper) jump to 70%
+    // translucent the moment anyone wheels once.
+    internal void SetPaperPersistentOpacity(PaperData paper, double opacity)
+    {
+        var normalized = ExperimentalOpacityLevels.Normalize(
+            opacity,
+            ExperimentalOpacityLevels.DefaultPersistentPaper);
+        if (Math.Abs(paper.PersistentOpacityLevel - normalized) < 0.001)
+        {
+            return;
+        }
+
+        paper.PersistentOpacityLevel = normalized;
+        if (!State.ExperimentalPersistentPaperOpacity)
+        {
+            ToggleExperimentalPersistentPaperOpacity();
+            if (Math.Abs(
+                    State.ExperimentalPersistentPaperOpacityLevel - 1.0) < 0.001)
+            {
+                State.ExperimentalPersistentPaperOpacityLevel = 1.0;
+            }
+            else
+            {
+                SetExperimentalPersistentPaperOpacityLevelFromPaper(1.0);
+            }
+        }
+        if (_windows.TryGetValue(paper.Id, out var window))
+        {
+            window.UpdateExperimentalOpacitySettings();
+        }
         MarkDirty();
     }
 

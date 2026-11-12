@@ -108,6 +108,105 @@ public sealed partial class PaperWindow
         box.CaptureMouse();
     }
 
+    // ---------- Todo blank-area window drag (v3) ----------
+    // Notes drag the window from their read-only preview body. Todo papers have no
+    // preview state, but the todo BODY ScrollViewer owns a real blank zone: the
+    // viewport area below/around the _todoPanel (few items). Rows, checkboxes and the
+    // "+" append bar all live INSIDE _todoPanel and are excluded structurally — the
+    // gesture mounts on the ScrollViewer itself, so the top bar, capsule and every
+    // other window surface are outside its blast radius by construction.
+    internal bool ShouldTodoBlankPressStartWindowDrag(DependencyObject? source)
+    {
+        if (_paper.IsCollapsed || !_paper.IsVisible)
+        {
+            return false;
+        }
+        if (source == null || IsDescendantOfTodoBody(source))
+        {
+            return false; // inside the panel: rows / checkboxes / append bar keep their semantics
+        }
+        return !IsScrollBarInteractionSource(source, this);
+    }
+
+    private bool IsDescendantOfTodoBody(DependencyObject? source)
+    {
+        var current = source;
+        while (current != null)
+        {
+            if (ReferenceEquals(current, _todoPanel))
+            {
+                return true;
+            }
+            current = GetSafeParent(current);
+        }
+        return false;
+    }
+
+    internal void BeginTodoBlankPressDragOrClear(
+        UIElement host,
+        MouseButtonEventArgs e)
+    {
+        var start = e.GetPosition(this);
+        var ended = false;
+        MouseButtonEventHandler? upHandler = null;
+        MouseEventHandler? moveHandler = null;
+        MouseEventHandler? captureLostHandler = null;
+
+        void End(bool dragged)
+        {
+            if (ended)
+            {
+                return;
+            }
+
+            ended = true;
+            host.PreviewMouseLeftButtonUp -= upHandler;
+            host.PreviewMouseMove -= moveHandler;
+            host.LostMouseCapture -= captureLostHandler;
+            if (ReferenceEquals(Mouse.Captured, host))
+            {
+                host.ReleaseMouseCapture();
+            }
+
+            if (!dragged)
+            {
+                ClearTodoSelection();
+            }
+        }
+
+        upHandler = (_, up) =>
+        {
+            End(dragged: false);
+            up.Handled = true;
+        };
+        moveHandler = (_, move) =>
+        {
+            if (move.LeftButton != MouseButtonState.Pressed)
+            {
+                End(dragged: true);
+                return;
+            }
+
+            var p = move.GetPosition(this);
+            if (Math.Abs(p.X - start.X) < PreviewDragThreshold &&
+                Math.Abs(p.Y - start.Y) < PreviewDragThreshold)
+            {
+                return;
+            }
+
+            End(dragged: true);
+            DetachExperimentalAttachmentBeforeUserDrag();
+            WindowNative.BeginWindowCaptionDrag(this);
+            move.Handled = true;
+        };
+        captureLostHandler = (_, _) => End(dragged: true);
+
+        host.PreviewMouseLeftButtonUp += upHandler;
+        host.PreviewMouseMove += moveHandler;
+        host.LostMouseCapture += captureLostHandler;
+        host.CaptureMouse();
+    }
+
     private void InitializeDragGestures(FrameworkElement surface)
     {
         // Maximize/minimize transitions must reconcile the immersive header extent.

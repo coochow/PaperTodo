@@ -214,7 +214,9 @@ internal static class GlobalShortcutCatalog
         {
             new(Show, "ShortcutShowAll", "", GlobalShortcutGroup.General, StartupCommandKind.Show),
             new(Hide, "ShortcutHideAll", "", GlobalShortcutGroup.General, StartupCommandKind.Hide),
-            new(Toggle, "ShortcutToggleVisibility", "", GlobalShortcutGroup.General, StartupCommandKind.Toggle),
+            // Custom patch (dev branch): default-bind the global visibility toggle to
+            // Alt+P (fill-empty-only: users who already configured a key keep theirs).
+            new(Toggle, "ShortcutToggleVisibility", "Alt+P", GlobalShortcutGroup.General, StartupCommandKind.Toggle, DefaultEnabled: true),
             new(NewTodo, "ShortcutNewTodo", "", GlobalShortcutGroup.General, StartupCommandKind.NewTodo),
             new(NewNote, "ShortcutNewNote", "", GlobalShortcutGroup.General, StartupCommandKind.NewNote),
             new(Exit, "ShortcutExit", "", GlobalShortcutGroup.General, StartupCommandKind.Exit),
@@ -255,12 +257,15 @@ internal static class GlobalShortcutCatalog
                 GlobalShortcutGroup.Labs,
                 ExperimentalKind: ExperimentalShortcutKind.CurrentPaperTransparent),
             // Custom patch (dev branch): Alt+O collapse/restore expanded papers; the
-            // label key is a custom Supplemental string.
+            // label key is a custom Supplemental string. Ships with a default binding
+            // (DefaultGesture + DefaultEnabled) so fresh installs get the feature
+            // working out of the box — the upstream convention for shipped defaults.
             new(
                 CollapseExpandedPapers,
                 "ShortcutCollapseExpandedPapers",
-                "",
+                "Alt+O",
                 GlobalShortcutGroup.General,
+                DefaultEnabled: true,
                 ExperimentalKind: ExperimentalShortcutKind.CollapseExpandedPapers)
         };
 

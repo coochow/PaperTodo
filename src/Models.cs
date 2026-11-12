@@ -458,7 +458,11 @@ public sealed class AppState
     public List<PaperData> Papers { get; set; } = new();
     [JsonPropertyOrder(-100)]
     public string UiLanguage { get; set; } = UiLanguages.Default;
-    public string Theme { get; set; } = "system";
+    // Custom patch (dev branch): default to light (paper-colored) notes rather than
+    // following the OS theme — sticky notes are "paper" by nature and dark-OS users
+    // were surprised by black sheets. Fill-empty-only: existing data.json keeps its
+    // stored theme; users can still switch to system/dark in settings.
+    public string Theme { get; set; } = "light";
     public string ColorScheme { get; set; } = ColorSchemes.Warm;
     // Null is the legacy migration sentinel; an explicit "paper" never implies Mica.
     public string? PaperSkin { get; set; }
@@ -510,7 +514,10 @@ public sealed class AppState
     // the remaining commands live in the menu. The per-paper types have no separate layout.
     public List<string> TopBarShortcutOrder { get; set; } =
         PaperTopBarShortcuts.NormalizeOrder(null);
-    public int TopBarPinnedCount { get; set; } = 1;
+    // Custom patch (dev branch): pin all four built-in shortcuts to the top bar by
+    // default (association / new note / new todo / external editor) — the pre-beta1
+    // behavior users expect. Fill-empty-only: stored layouts keep their own count.
+    public int TopBarPinnedCount { get; set; } = 4;
     // Read-only legacy migration inputs from older data.json versions. Do not write
     // obsolete per-type lists back once converted to the single global layout.
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -635,9 +642,17 @@ public sealed class PaperData
     public double Height { get; set; } = 360;
 
     public bool IsVisible { get; set; } = true;
-    public bool AlwaysOnTop { get; set; }
+    // Custom patch (dev branch): new papers default to always-on-top — sticky notes
+    // exist to stay glanceable. Fill-empty-only: existing papers keep their stored
+    // value; the top-bar pin toggles it per paper.
+    public bool AlwaysOnTop { get; set; } = true;
     public bool IsCollapsed { get; set; } = false;
     public double TextZoom { get; set; } = 1.0;
+    // Custom patch (dev branch): per-paper persistent opacity. 0 is the sentinel
+    // "not individually tuned" — such papers follow the global setting; once the
+    // Shift+wheel tunes this paper, its value wins over the global default.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public double PersistentOpacityLevel { get; set; } = 0;
 
     // Custom patch (dev branch): immersive editing — the whole top bar (title +
     // action buttons) is hidden while the paper stays expanded and interactive.

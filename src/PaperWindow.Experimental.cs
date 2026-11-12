@@ -174,7 +174,11 @@ public sealed partial class PaperWindow
             ? _controller.AdvancedShortcutOpacity
             : _controller.State.ExperimentalPersistentPaperOpacity && !_paper.IsCollapsed
                 ? ExperimentalOpacityLevels.Normalize(
-                    _controller.State.ExperimentalPersistentPaperOpacityLevel,
+                    // Custom patch (dev branch): a paper tuned by Shift+wheel keeps its
+                    // own level; untouched papers (sentinel 0) follow the global default.
+                    _paper.PersistentOpacityLevel != 0
+                        ? _paper.PersistentOpacityLevel
+                        : _controller.State.ExperimentalPersistentPaperOpacityLevel,
                     ExperimentalOpacityLevels.DefaultPersistentPaper)
                 : !_controller.State.ExperimentalInactivePaperOpacity ||
                   _paper.IsCollapsed ||
