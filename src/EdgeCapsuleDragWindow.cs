@@ -481,7 +481,10 @@ internal sealed partial class EdgeCapsuleDragWindow : Window
 #if DEBUG
         var renderStartedAt = EdgeCapsulePerformanceDiagnostics.Timestamp();
 #endif
-        Dispatcher.Invoke(static () => { }, System.Windows.Threading.DispatcherPriority.Render);
+        // Custom patch (dev branch): async barrier (BeginInvoke, not Invoke) — the docking
+        // flight ticks call this from inside the render loop, where a synchronous Invoke
+        // throws "dispatcher processing is suspended" (queue-transfer crash, 2026-11-13).
+        Dispatcher.BeginInvoke(static () => { }, System.Windows.Threading.DispatcherPriority.Render);
 #if DEBUG
         EdgeCapsulePerformanceDiagnostics.Trace(
             $"drag.host phase=native-ready paper={_diagnosticId} dragHost={_diagnosticHostId} " +

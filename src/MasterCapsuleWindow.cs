@@ -1295,7 +1295,11 @@ public sealed class MasterCapsuleWindow : Window
 
         PublishQueueTransferHandoff();
         // Call only after controller queue synchronization has finished: Render can reenter it.
-        Dispatcher.Invoke(static () => { }, System.Windows.Threading.DispatcherPriority.Render);
+        // Custom patch (dev branch): async barrier (BeginInvoke, not Invoke) — this runs on
+        // the docking-flight render tick, where a synchronous Invoke throws
+        // "dispatcher processing is suspended" and crashes the queue transfer. The queued
+        // empty Render callback still orders subsequent renders behind it.
+        Dispatcher.BeginInvoke(static () => { }, System.Windows.Threading.DispatcherPriority.Render);
     }
 
     private void PublishQueueTransferHandoff()

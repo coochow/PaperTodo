@@ -26,7 +26,7 @@
 | P7 | 设置→「关于」页（版本号+定制构建说明+使用手册单链接，指向 fork 的 CUSTOM_FEATURES.md；预留未来检查更新/OTA） | `AppController.Settings.About.cs`(全新分部文件) `AppController.Settings.cs`(枚举+About+锚) `AppController.SettingsSidebar.cs`(导航项+路由+锚) | 独立文件为主 | ✅ 已确认 |
 | P8 | 编辑器右键「表格视图（临时）」：光标在 GFM 管道表格内可用（菜单 Opened 时按光标动态置灰），转换为 CJK 感知等宽对齐代码块，Ctrl+Z 一步还原原始表格；粘贴永远原样（数据零损失） | `MarkdownTablePaste.cs`(全新纯函数静态类) `PaperWindow.Note.cs`(编辑菜单尾+锚、OpenCapsuleForEditing 改 internal+锚) `PaperWindow.CustomPatches.cs`(IsTableViewAvailableAtCaret+ToggleNoteTableView) 4 resx(MenuTableView) | 独立文件为主 | ✅ 已确认 |
 | P9 | Alt+O「收起/展开全部纸片（胶囊不动）」全局命令（可配置；快照只记本命令收起的纸片 id，中途手动操作被尊重；复用上游 SetCollapsedState/OpenCapsuleForEditing） | `AppController.CollapsePapers.cs`(全新分部文件) `GlobalHotkeys.cs`(enum+catalog+锚) `AppController.ExperimentalPassive.cs`(分发 1 case+锚) `Strings.cs`(标签键) | 独立文件为主 | ✅ 已确认 |
-| P10 | 版本发布 + 检查更新/OTA：fork 版本号独立序列（1.0.0 起）；GitHub Release 由 `custom-release.yml`（push v* tag 触发）构建双资产（multi-file ZIP 推荐 + 单文件 exe）+ manifest.json + delta 包；应用内关于页手动检查 + 启动静默检查（气泡）；增量升级 = 本地 SHA256 比对 → delta 包或全量 ZIP → 校验 → `.old` 改名换文件 → 重启（复用 RequestRestartAfterExit） | `src/UpdateService.cs`(全新文件) `AppController.Settings.About.cs`(扩展) `AppController.cs`(StartAsync 挂启动检查+锚) `Models.cs`(UpdateCheckEnabled 字段+锚) `AppController.SettingsApi.Catalog.cs`(1 setting+锚) `Strings.cs`(3 键+锚) `PaperTodo.csproj`(Version→1.0.0+锚) `.github/workflows/custom-release.yml`(全新) `.github/workflows/release.yml`(禁上游 tag 触发+锚) | 独立文件为主 | ✅ 已端到端验证（v1.0.0→v1.0.1 delta 1.54MB/77.6MB，338 文件零失配） |
+| P10 | 版本发布+检查更新/OTA：GitHub Release=custom-release.yml（push v* tag 触发，自动构建嵌套 ZIP+manifest+delta）；GitLab common_tools/PaperTodo 镜像+latest.json 指针；客户端 GitLab latest.json 优先（6s 探测）→GitHub 兜底；关于页手动检查+启动静默气泡；增量升级=本地 SHA256 比对→delta 或全量→校验→`.old` 换文件→重启。v1.0.2 已发布（00ada91d），v1.0.0/1.0.1 已退役（旧客户端要求 exe 资产对现布局全盲） | 文件清单见 v1.0.2 提交（UpdateService/About/workflow 等） | 独立文件为主 | ✅ v1.0.2 双端核验通过 |
 
 已撤销并清理干净的尝试（勿再引入，含死代码已删）：
 - 右键长按拖动三代（手动位移 / 窗口级捕获死锁 / 借 chrome 会话僵死）；
@@ -62,10 +62,13 @@
 
 ## 五、待办 / 已知问题
 
-- [x] P10 发布流程首次实跑验证 ✅（2026-11-06）：v1.0.0/v1.0.1 已发布；端到端升级实测通过（delta 1.54MB vs 全量 77.6MB，升级后 338 文件零失配，`.old`/staging 清理干净，升级版启动稳定）；
-- [ ] **CI workflow 三个坑（已修，勿再犯）**：①`Copy-Item` 用 `-Destination`（PS 5.1 无 `-DestinationPath`）；②`gh release view` 探测失败后必须 `$global:LASTEXITCODE = 0` 重置（GitHub pwsh 包装器以 `exit $LASTEXITCODE` 收尾，陈旧退出码会误杀整个步骤）；③`Test-Path -LiteralPath` **不展开通配符**，glob 判断必须用 `-Path`/`Get-ChildItem`；
-- [ ] v1.0.1 为测试版（仅含 OtaTestMarker 无害标记文件）：下一个功能版本自然取代；如需撤销 v1.0.1，删 tag+release 重发即可（尚无外部用户）；
-- [ ] P10 后续发布口令：「发布新版本」= 改 `PaperTodo.csproj` Version → commit → push dev → tag `v<版本>` → push tag（触发 custom-release.yml 全自动）；OTA 用户在应用内即可检测并增量升级；
+- [ ] v1.0.3 待发布内容集（攒批）：①镜像「已是最新」判定权威化——镜像 up-to-date 与镜像失败共用 null 返回值，内网+GitHub 匿名配额耗尽时误报「检查失败」（v1.0.2 tag 溯源实锤，注释写权威实现未权威）②升级 apply 成功却报「失败」的 UI 误报（2026-11-12 实测）③检查失败时提示具体通道 ④关于页手册链接 GitLab/GitHub 探测定向（已在工作区实现待发）⑤OtaTestMarker.cs 删除；
+- [ ] 2026-11-13 新修待发：胶囊队列换边崩溃——渲染回调内同步 Dispatcher.Invoke 抛 suspended，MasterCapsuleWindow.cs 与 EdgeCapsuleDragWindow.cs 两处渲染屏障改 BeginInvoke（带锚）；上游 beta1 原生 bug，合并队列换边动画完成帧触发；
 - [ ] 上游发布 4.0 正式版：执行首次 rebase（fork 点 411078b 落后上游已较多；预期冲突点 `PaperTitles.cs`/`RefreshExperimentalOpacity`/`Note.cs` noteMouseDown，按裁决规则 2/3/6 处理）；
 - [ ] issue #384 若作者实现同类标题逻辑：撤 P3；#383 上下停靠若作者想通交互：直接用上游；
 - [ ] 上游 4.0 材质透明度落地后：评估撤 P1/P6（改用材质透明度），并把 Alt+滚轮接为其快捷键。
+
+**已完成（存档）**：
+
+- [x] P10 发布流程首次实跑验证 ✅（2026-11-06）：v1.0.0/v1.0.1 已发布；端到端升级实测通过（delta 1.54MB vs 全量 77.6MB，升级后 338 文件零失配，`.old`/staging 清理干净，升级版启动稳定）；
+

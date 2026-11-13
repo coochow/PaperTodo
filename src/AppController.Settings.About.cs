@@ -1,6 +1,9 @@
 using System;
 using System.Diagnostics;
+using System.Net.Http;
 using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -14,7 +17,16 @@ namespace PaperTodo;
 public sealed partial class AppController
 {
     private const string CustomBuildDocsUrl =
-        "https://github.com/coochow/PaperTodo/blob/dev/CUSTOM_FEATURES.md";
+        "https://github.com/coochow/PaperTodo/blob/dev/README.zh.md";
+    // Custom patch (dev branch): internal mirror of the user manual. GitLab
+    // downloaders are intranet users — one link opens the GitLab copy when the
+    // internal mirror is reachable (same raw channel the updater already uses)
+    // and falls back to the GitHub original otherwise, so a single binary serves
+    // both audiences.
+    private const string CustomBuildDocsInternalUrl =
+        "https://gitlab.vmic.xyz/res/soft/common_tools/-/blob/master/PaperTodo/README.md";
+    private const string CustomBuildDocsInternalProbeUrl =
+        "https://gitlab.vmic.xyz/res/soft/common_tools/-/raw/master/PaperTodo/README.md";
 
     private UpdateService.UpdateInfo? _pendingUpdate;
     private bool _updateCheckRunning;
@@ -75,13 +87,17 @@ public sealed partial class AppController
             SettingsSidebarLocalized("文档", "Docs", "ドキュメント", "문서"),
             topMargin: 10));
 
+        // Custom patch (dev branch): single manual link that resolves per
+        // environment — GitLab mirror when the internal raw channel answers
+        // (intranet, same channel the updater uses), GitHub original otherwise.
         content.Children.Add(BuildAboutLinkItem(
             SettingsSidebarLocalized(
                 "使用手册（基础 + 定制功能）",
                 "User manual (base + custom features)",
                 "使用マニュアル（基本 + カスタム機能）",
                 "사용 설명서(기본 + 커스텀 기능)"),
-            CustomBuildDocsUrl,
+            CustomBuildDocsInternalUrl,
+            fallbackUrl: CustomBuildDocsUrl,
             isPrimary: true));
 
         return new Border
@@ -214,7 +230,7 @@ public sealed partial class AppController
         {
             _pendingUpdate = await Task.Run(UpdateService.CheckForUpdateAsync);
         }
-        catch
+        catch (Exception ex)
         {
             _pendingUpdate = null;
             checkFailed = true;
@@ -234,10 +250,10 @@ public sealed partial class AppController
         else if (checkFailed)
         {
             SetAboutUpdateStatus(SettingsSidebarLocalized(
-                "检查更新失败，请稍后重试。",
-                "The update check failed. Please try again later.",
-                "アップデートの確認に失敗しました。後でもう一度お試しください。",
-                "업데이트 확인에 실패했습니다. 나중에 다시 시도하세요."));
+                "检查更新失败（内网 GitLab 与 GitHub 通道均不可达或被限流），请稍后重试或联系维护者。",
+                "The update check failed (both the intranet GitLab and GitHub channels were unreachable or rate-limited). Retry later or contact the maintainer.",
+                "アップデートの確認に失敗しました（社内 GitLab と GitHub の両チャネルに到達できないか、制限されています）。後でもう一度お試しください。",
+                "업데이트 확인에 실패했습니다(사내 GitLab과 GitHub 채널 모두 접근 불가 또는 제한됨). 나중에 다시 시도하세요."));
         }
         else
         {
@@ -326,7 +342,8 @@ public sealed partial class AppController
         return collapsed.Length <= 600 ? collapsed : collapsed[..600] + "…";
     }
 
-    private UIElement BuildAboutLinkItem(string label, string url, bool isPrimary = false)
+    private UIElement BuildAboutLinkItem(string label, string url, bool isPrimary = false,
+        string? fallbackUrl = null)
     {
         var text = new TextBlock
         {
@@ -352,12 +369,46 @@ public sealed partial class AppController
         ToolTipService.SetShowDuration(border, 12000);
         border.MouseEnter += (_, _) => text.Foreground = Theme.LinkBrush;
         border.MouseLeave += (_, _) => text.Foreground = isPrimary ? TrayTextBrush : TrayWeakTextBrush;
-        border.MouseLeftButtonUp += (_, e) =>
+        border.MouseLeftButtonUp += async (_, e) =>
         {
-            OpenUrl(url);
+            // Custom patch (dev branch): when a fallback exists, the primary URL is
+            // the internal mirror and the click resolves per environment — probe the
+            // mirror's raw channel (the same one the updater already uses); a plain
+            // 200 means the intranet can read it, anything else (timeout, SSO
+            // redirect, error) falls back to the public original.
+            if (fallbackUrl is null)
+            {
+                OpenUrl(url);
+            }
+            else if (await TryProbeUrlAsync(url))
+            {
+                OpenUrl(url);
+            }
+            else
+            {
+                OpenUrl(fallbackUrl);
+            }
             e.Handled = true;
         };
         return border;
+    }
+
+    private static async Task<bool> TryProbeUrlAsync(string url)
+    {
+        // The manual's blob page requires an HTML session; the raw sibling of the
+        // same path answers with a plain 200 to unauthenticated requests on the
+        // intranet, which is exactly what the OTA channel relies on.
+        var rawUrl = url.Replace("/-/blob/", "/-/raw/");
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            using var response = await UpdateService.ProbeRawUrlAsync(rawUrl, cts.Token);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static void OpenUrl(string url)

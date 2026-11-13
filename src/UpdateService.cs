@@ -112,6 +112,13 @@ internal static class UpdateService
         return client;
     }
 
+    /// <summary>
+    /// Probe helper shared with the About page's doc-link fallback: issues a plain
+    /// GET and returns the response as-is; callers impose their own timeout.
+    /// </summary>
+    internal static Task<HttpResponseMessage> ProbeRawUrlAsync(string url, CancellationToken cancellation) =>
+        Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellation);
+
     internal static string CurrentVersion =>
         typeof(UpdateService).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
@@ -192,17 +199,37 @@ internal static class UpdateService
     internal static async Task<UpdateInfo?> CheckForUpdateAsync()
     {
         // Internal mirror first: same versioned assets, faster on the intranet, and
-        // an unauthenticated raw URL (no rate limits). Falls through to GitHub on any
-        // failure (offline mirror, malformed pointer, network split).
-        var internalInfo = await TryCheckInternalMirrorAsync().ConfigureAwait(false);
-        if (internalInfo is not null)
+        // an unauthenticated raw URL (no rate limits). Falls through to GitHub only
+        // when the mirror itself FAILED — the mirror's "up to date" verdict is
+        // AUTHORITATIVE (both channels publish the same release), so internal users
+        // never depend on GitHub's anonymous API quota just to hear "no update".
+        // Custom patch note: v1.0.2 conflated "mirror says up to date" with "mirror
+        // failed" in a single null, so a GitHub quota 403 turned a clean "latest"
+        // verdict into a spurious failure report.
+        var mirror = await TryCheckInternalMirrorAsync().ConfigureAwait(false);
+        if (mirror.ResultKind == MirrorCheckResultKind.UpToDate)
         {
-            return internalInfo;
+            return null;
+        }
+        if (mirror.ResultKind == MirrorCheckResultKind.UpdateInfo && mirror.Info is { } found)
+        {
+            return found;
         }
         return await CheckGitHubReleaseAsync().ConfigureAwait(false);
     }
 
-    private static async Task<UpdateInfo?> TryCheckInternalMirrorAsync()
+    // Custom patch (dev branch): three-way mirror outcome so the "up to date"
+    // verdict is distinguishable from a failed probe.
+    private enum MirrorCheckResultKind
+    {
+        UpdateInfo,
+        UpToDate,
+        Failed
+    }
+
+    private sealed record MirrorCheckResult(MirrorCheckResultKind ResultKind, UpdateInfo? Info = null);
+
+    private static async Task<MirrorCheckResult> TryCheckInternalMirrorAsync()
     {
         try
         {
@@ -211,36 +238,40 @@ internal static class UpdateService
             using var pointer = JsonDocument.Parse(StripBom(pointerJson));
             var root = pointer.RootElement;
             var version = GetStringProperty(root, "LatestVersion").Trim();
-            if (string.IsNullOrWhiteSpace(version) || !IsNewerVersion(version, CurrentVersion))
+            if (string.IsNullOrWhiteSpace(version))
             {
-                // Up to date per the mirror — GitHub cannot know better: both channels
-                // publish the same release. Returning null (not falling through) also
-                // keeps "no update" quiet on networks where GitHub is blocked.
+                return new MirrorCheckResult(MirrorCheckResultKind.Failed);
+            }
+            if (!IsNewerVersion(version, CurrentVersion))
+            {
+                // Up to date per the mirror — AUTHORITATIVE: both channels publish the
+                // same release, so GitHub's "no update" adds nothing while its anonymous
+                // quota can turn this verdict into a spurious failure report.
                 return null;
             }
 
             var manifestName = GetStringProperty(root, "Manifest");
             if (string.IsNullOrWhiteSpace(manifestName))
             {
-                return null;
+                return new MirrorCheckResult(MirrorCheckResultKind.Failed);
             }
             var manifestJson = await Http.GetStringAsync(
                 $"{InternalFileRoot}/{Uri.EscapeDataString(manifestName)}", probe.Token).ConfigureAwait(false);
             var manifest = ParseManifest(manifestJson);
             if (!string.Equals(manifest.Version, version, StringComparison.OrdinalIgnoreCase))
             {
-                return null; // mirror out of sync: let GitHub decide
+                return new MirrorCheckResult(MirrorCheckResultKind.Failed); // mirror out of sync: let GitHub decide
             }
 
             var zipName = GetStringProperty(root, "FileName");
             if (string.IsNullOrWhiteSpace(zipName))
             {
-                return null;
+                return new MirrorCheckResult(MirrorCheckResultKind.Failed);
             }
             var deltaUrl = manifest.Delta is { } delta && !string.IsNullOrWhiteSpace(delta.Asset)
                 ? $"{InternalFileRoot}/{Uri.EscapeDataString(delta.Asset)}"
                 : null;
-            return new UpdateInfo
+            return new MirrorCheckResult(MirrorCheckResultKind.UpdateInfo, new UpdateInfo
             {
                 Version = version,
                 ReleaseUrl = $"https://gitlab.vmic.xyz/res/soft/common_tools/-/tree/master/PaperTodo",
@@ -253,12 +284,12 @@ internal static class UpdateService
                                zhNote.ValueKind == JsonValueKind.String
                     ? zhNote.GetString() ?? ""
                     : ""
-            };
+            });
         }
         catch
         {
             // Mirror unreachable/malformed: fall back to GitHub silently.
-            return null;
+            return new MirrorCheckResult(MirrorCheckResultKind.Failed);
         }
     }
 
@@ -645,18 +676,35 @@ internal static class UpdateService
             }
             // Phase 2: move staged files in. A failure here leaves .old files behind and
             // possibly a half-applied update; the user re-runs the update to finish it.
+            var movedIn = 0;
             foreach (var relativeName in applyFiles)
             {
                 var staged = Path.Combine(applyRoot, relativeName);
                 var live = Path.Combine(appDir, relativeName);
                 Directory.CreateDirectory(Path.GetDirectoryName(live) ?? appDir);
                 File.Move(staged, live);
+                movedIn++;
             }
-            TryDeleteDirectory(Path.GetDirectoryName(applyRoot) ?? applyRoot);
-            if (restartAfterExit && Application.Current is App app)
+            // Custom patch (dev branch): once every apply file has moved in, the update
+            // IS applied — anything failing afterwards (staging cleanup hitting a locked
+            // file, restart marshalling) must not turn a completed swap into a "failed"
+            // report, as observed during the 2026-11-12 v1.0.1-v1.0.2 upgrade.
+            if (movedIn == applyFiles.Count)
             {
-                app.RequestRestartAfterExit();
-                app.Dispatcher.BeginInvoke(() => { try { Application.Current.Shutdown(); } catch { } });
+                try
+                {
+                    TryDeleteDirectory(Path.GetDirectoryName(applyRoot) ?? applyRoot);
+                }
+                catch (Exception cleanupEx)
+                {
+                    Trace.WriteLine($"[Update] staging cleanup after apply skipped: {cleanupEx.Message}");
+                }
+                if (restartAfterExit && Application.Current is App app)
+                {
+                    app.RequestRestartAfterExit();
+                    app.Dispatcher.BeginInvoke(() => { try { Application.Current.Shutdown(); } catch { } });
+                }
+                return true;
             }
             return true;
         }
