@@ -27,6 +27,7 @@
 | P8 | 编辑器右键「表格视图（临时）」：光标在 GFM 管道表格内可用（菜单 Opened 时按光标动态置灰），转换为 CJK 感知等宽对齐代码块，Ctrl+Z 一步还原原始表格；粘贴永远原样（数据零损失） | `MarkdownTablePaste.cs`(全新纯函数静态类) `PaperWindow.Note.cs`(编辑菜单尾+锚、OpenCapsuleForEditing 改 internal+锚) `PaperWindow.CustomPatches.cs`(IsTableViewAvailableAtCaret+ToggleNoteTableView) 4 resx(MenuTableView) | 独立文件为主 | ✅ 已确认 |
 | P9 | Alt+O「收起/展开全部纸片（胶囊不动）」全局命令（可配置；快照只记本命令收起的纸片 id，中途手动操作被尊重；复用上游 SetCollapsedState/OpenCapsuleForEditing） | `AppController.CollapsePapers.cs`(全新分部文件) `GlobalHotkeys.cs`(enum+catalog+锚) `AppController.ExperimentalPassive.cs`(分发 1 case+锚) `Strings.cs`(标签键) | 独立文件为主 | ✅ 已确认 |
 | P10 | 版本发布+检查更新/OTA：GitHub Release=custom-release.yml（push v* tag 触发，自动构建嵌套 ZIP+manifest+delta）；GitLab common_tools/PaperTodo 镜像+latest.json 指针；客户端 GitLab latest.json 优先（6s 探测）→GitHub 兜底；关于页手动检查+启动静默气泡；增量升级=本地 SHA256 比对→delta 或全量→校验→`.old` 换文件→重启。v1.0.2 已发布（00ada91d），v1.0.0/1.0.1 已退役（旧客户端要求 exe 资产对现布局全盲） | 文件清单见 v1.0.2 提交（UpdateService/About/workflow 等） | 独立文件为主 | ✅ v1.0.2 双端核验通过 |
+| P11 | 默认值定制：待办提醒默认启用+提醒声音默认启用+已完成待办默认移底（新装开箱即得；「恢复默认」同步对齐 fork 默认；用户本地实例按「配置=新用户默认」运维原则清理漂移，快捷分钟数 10 与提醒音 beep 属知情豁免） | `Models.cs`(3 字段初始化器+锚) `AppController.Settings.TodoPage.cs`(恢复默认 3 处+锚) | 上游文件小改 | ✅ 已确认 |
 
 已撤销并清理干净的尝试（勿再引入，含死代码已删）：
 - 右键长按拖动三代（手动位移 / 窗口级捕获死锁 / 借 chrome 会话僵死）；
@@ -62,8 +63,9 @@
 
 ## 五、待办 / 已知问题
 
-- [ ] v1.0.3 待发布内容集（攒批）：①镜像「已是最新」判定权威化——镜像 up-to-date 与镜像失败共用 null 返回值，内网+GitHub 匿名配额耗尽时误报「检查失败」（v1.0.2 tag 溯源实锤，注释写权威实现未权威）②升级 apply 成功却报「失败」的 UI 误报（2026-11-12 实测）③检查失败时提示具体通道 ④关于页手册链接 GitLab/GitHub 探测定向（已在工作区实现待发）⑤OtaTestMarker.cs 删除；
-- [ ] 2026-11-13 新修待发：胶囊队列换边崩溃——渲染回调内同步 Dispatcher.Invoke 抛 suspended，MasterCapsuleWindow.cs 与 EdgeCapsuleDragWindow.cs 两处渲染屏障改 BeginInvoke（带锚）；上游 beta1 原生 bug，合并队列换边动画完成帧触发；
+- [x] v1.0.3 待发布内容集（攒批）：①镜像「已是最新」判定权威化——镜像 up-to-date 与镜像失败共用 null 返回值，内网+GitHub 匿名配额耗尽时误报「检查失败」（v1.0.2 tag 溯源实锤，注释写权威实现未权威）②升级 apply 成功却报「失败」的 UI 误报（2026-11-12 实测）③检查失败时提示具体通道 ④关于页手册链接 GitLab/GitHub 探测定向（已在工作区实现待发）⑤OtaTestMarker.cs 删除；✅ v1.0.3 已发布（2026-11-16，GitHub tag=d1b6453f + GitLab acd5db6，delta-from-v1.0.2=8 文件/1.6MB，双端在线核验通过）；
+- [x] 2026-11-13 新修待发：胶囊队列换边崩溃——渲染回调内同步 Dispatcher.Invoke 抛 suspended，MasterCapsuleWindow.cs 与 EdgeCapsuleDragWindow.cs 两处渲染屏障改 BeginInvoke（带锚）；上游 beta1 原生 bug，合并队列换边动画完成帧触发；✅ 已随 v1.0.3 发布（上游 #456）；
+- [ ] v1.0.4 攒批（已进 dev 待发布）：P11 三默认值——待办提醒默认启用+提醒声音默认启用+已完成待办默认移底（Models.cs 字段初始化器+TodoPage 恢复默认同步，均带锚）；temp\default-verify\audit-defaults.ps1 默认对齐审计脚本留存备复用；
 - [ ] 上游发布 4.0 正式版：执行首次 rebase（fork 点 411078b 落后上游已较多；预期冲突点 `PaperTitles.cs`/`RefreshExperimentalOpacity`/`Note.cs` noteMouseDown，按裁决规则 2/3/6 处理）；
 - [ ] issue #384 若作者实现同类标题逻辑：撤 P3；#383 上下停靠若作者想通交互：直接用上游；
 - [ ] 上游 4.0 材质透明度落地后：评估撤 P1/P6（改用材质透明度），并把 Alt+滚轮接为其快捷键。

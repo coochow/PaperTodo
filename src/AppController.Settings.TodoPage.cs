@@ -125,18 +125,21 @@ public sealed partial class AppController
     {
         State.ShowTodoBottomBar = true;
         State.AutoClearCompletedTodos = false;
-        State.AutoMoveCompletedTodosToBottom = false;
+        // Custom patch (dev branch): restore to the fork defaults (enabled).
+        State.AutoMoveCompletedTodosToBottom = true;
         State.EnableTodoPaperLinks = true;
         State.ShowLinkedPaperName = false;
         State.AllowLongLinkedPaperTitles = false;
         State.ShowLinkedPathExtensionOnly = false;
         State.HideLinkedPapersFromCapsules = false;
         State.RunLinkedScriptCapsulesOnClick = false;
-        State.ExperimentalTodoReminders = false;
+        // Custom patch (dev branch): restore to the fork defaults (enabled).
+        State.ExperimentalTodoReminders = true;
         State.ExperimentalTodoReminderShowButton = true;
         State.ExperimentalTodoReminderQuickMinutes =
             ExperimentalTodoReminderOptions.DefaultQuickMinutes;
-        State.ExperimentalTodoReminderSoundEnabled = false;
+        // Custom patch (dev branch): restore to the fork defaults (enabled).
+        State.ExperimentalTodoReminderSoundEnabled = true;
         State.ExperimentalTodoReminderSound =
             TodoReminderSoundOptions.Asterisk;
 

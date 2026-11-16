@@ -480,7 +480,9 @@ public sealed class AppState
     public string TodoVisualSize { get; set; } = TodoVisualSizes.Medium;
     public bool ShowTodoBottomBar { get; set; } = true;
     public bool AutoClearCompletedTodos { get; set; }
-    public bool AutoMoveCompletedTodosToBottom { get; set; }
+    // Custom patch (dev branch): completed todos move to the bottom by default —
+    // finished items out of the way without a trip to settings.
+    public bool AutoMoveCompletedTodosToBottom { get; set; } = true;
     public bool AutoCompressLargeImages { get; set; } = true;
     public string UiFontPreset { get; set; } = UiFontPresets.Default;
     public string TextRenderingProfile { get; set; } = TextRenderingProfiles.Standard;
@@ -570,11 +572,15 @@ public sealed class AppState
         EdgeCapsuleHoverIntentSensitivities.Medium;
     public bool ExperimentalAllowLockIconUnlock { get; set; } = true;
     public double ExperimentalShortcutOpacityLevel { get; set; } = 0.35;
-    public bool ExperimentalTodoReminders { get; set; }
+    // Custom patch (dev branch): todo reminders default to enabled — the feature is
+    // otherwise undiscoverable behind its Labs-only toggle.
+    public bool ExperimentalTodoReminders { get; set; } = true;
     public bool ExperimentalTodoReminderShowButton { get; set; } = true;
     public int ExperimentalTodoReminderQuickMinutes { get; set; } =
         ExperimentalTodoReminderOptions.DefaultQuickMinutes;
-    public bool ExperimentalTodoReminderSoundEnabled { get; set; }
+    // Custom patch (dev branch): reminder sound on by default — reminders double as
+    // alarms in this fork.
+    public bool ExperimentalTodoReminderSoundEnabled { get; set; } = true;
     public string ExperimentalTodoReminderSound { get; set; } =
         TodoReminderSoundOptions.Asterisk;
     public bool McpEnabled { get; set; }
