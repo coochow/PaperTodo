@@ -65,7 +65,7 @@
 
 - [x] v1.0.3 待发布内容集（攒批）：①镜像「已是最新」判定权威化——镜像 up-to-date 与镜像失败共用 null 返回值，内网+GitHub 匿名配额耗尽时误报「检查失败」（v1.0.2 tag 溯源实锤，注释写权威实现未权威）②升级 apply 成功却报「失败」的 UI 误报（2026-11-12 实测）③检查失败时提示具体通道 ④关于页手册链接 GitLab/GitHub 探测定向（已在工作区实现待发）⑤OtaTestMarker.cs 删除；✅ v1.0.3 已发布（2026-11-16，GitHub tag=d1b6453f + GitLab acd5db6，delta-from-v1.0.2=8 文件/1.6MB，双端在线核验通过）；
 - [x] 2026-11-13 新修待发：胶囊队列换边崩溃——渲染回调内同步 Dispatcher.Invoke 抛 suspended，MasterCapsuleWindow.cs 与 EdgeCapsuleDragWindow.cs 两处渲染屏障改 BeginInvoke（带锚）；上游 beta1 原生 bug，合并队列换边动画完成帧触发；✅ 已随 v1.0.3 发布（上游 #456）；
-- [ ] v1.0.4 攒批（已进 dev 待发布）：P11 三默认值——待办提醒默认启用+提醒声音默认启用+已完成待办默认移底（Models.cs 字段初始化器+TodoPage 恢复默认同步，均带锚）；temp\default-verify\audit-defaults.ps1 默认对齐审计脚本留存备复用；
+- [x] v1.0.4 已发布（2026-11-17）：P11 三默认值——待办提醒默认启用+提醒声音默认启用+已完成待办默认移底（Models.cs 字段初始化器+TodoPage 恢复默认同步，均带锚）；GitHub tag=v1.0.4（567d3cb6）三资产在线核验 + GitLab master=d501dcc latest.json 在线核验，delta-from-v1.0.3=8文件/1.6MB；发布前 fresh 验收实证三默认落盘；audit-defaults.ps1 对齐审计脚本留存可复跑；已知现象：CI 现编 lmdb 链接时间戳每次漂移（大小恒 164352B），delta 永含 lmdb 无害；踩坑记录：本仓 remote.origin.push=*:refs/for/* 会改写 tag/分支引用（tag 曾误推 refs/for/refs/tags/）——推送必须显式 refs/tags/…或 refs/heads/…全路径；
 - [ ] 上游发布 4.0 正式版：执行首次 rebase（fork 点 411078b 落后上游已较多；预期冲突点 `PaperTitles.cs`/`RefreshExperimentalOpacity`/`Note.cs` noteMouseDown，按裁决规则 2/3/6 处理）；
 - [ ] issue #384 若作者实现同类标题逻辑：撤 P3；#383 上下停靠若作者想通交互：直接用上游；
 - [ ] 上游 4.0 材质透明度落地后：评估撤 P1/P6（改用材质透明度），并把 Alt+滚轮接为其快捷键。
