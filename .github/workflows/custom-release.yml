@@ -91,7 +91,7 @@ jobs:
           # with a stale pin (1.0.3) and broke both. Fail the build on any mismatch.
           $infoNodes = $project.SelectNodes('/Project/PropertyGroup/InformationalVersion')
 
-      if ($infoNodes.Count -gt 0) {
+          if ($infoNodes.Count -gt 0) {
             $infoVersion = ([string]$infoNodes[0].InnerText).Trim()
             if ($infoVersion -ne $env:VERSION) {
               throw "PaperTodo.csproj InformationalVersion '$infoVersion' does not match tag '$env:VERSION'. The About page reads this value."
