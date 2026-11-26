@@ -93,6 +93,11 @@ internal static class UpdateService
         public required string Manifest { get; init; }
         public required string MultiFileZipUrl { get; init; }
         public string? DeltaZipUrl { get; init; }
+        // Custom patch (dev branch): the other channel's URL for the SAME assets. The mirror
+        // and the GitHub release are byte-identical, so one flaky host must not fail an
+        // upgrade (the 2026-11-18 .. 11-24 failure streak came from exactly that).
+        public string? FallbackMultiFileZipUrl { get; init; }
+        public string? FallbackDeltaZipUrl { get; init; }
         public required string ReleaseNotes { get; init; }
     }
 
@@ -100,6 +105,80 @@ internal static class UpdateService
     {
         public long TotalBytes { get; init; }
         public long CompletedBytes { get; init; }
+    }
+
+    // Custom patch (dev branch): stage-aware update failure reporting. The old contract was a
+    // bare false, which made the multi-day failure streak (2026-11-18 .. 11-24) undiagnosable.
+    // Every phase now records where it stopped and appends a line to
+    // %LOCALAPPDATA%\PaperTodo\update-trace.log.
+    internal enum UpdateFailureStage
+    {
+        None,
+        NotSupported,
+        Manifest,
+        Download,
+        Extract,
+        Apply,
+        Restart,
+        AlreadyCurrent,
+        Unknown
+    }
+
+    // The local files already equal the release payload; re-running the update would only
+    // rewrite identical bytes. Reported under its own stage so the About page can say
+    // "already current" instead of surfacing a scary failure.
+    private sealed class UpdateAlreadyCurrentException : Exception
+    {
+        internal UpdateAlreadyCurrentException(string message) : base(message) { }
+    }
+
+    private static readonly object TraceLogLock = new();
+    private static UpdateFailureStage _currentStage = UpdateFailureStage.None;
+
+    internal static UpdateFailureStage LastFailureStage { get; private set; }
+    internal static string LastFailureDetail { get; private set; } = "";
+
+    private static void BeginStage(UpdateFailureStage stage) => _currentStage = stage;
+
+    private static void RecordFailure(UpdateFailureStage stage, Exception ex)
+    {
+        LastFailureStage = stage;
+        LastFailureDetail = ex.Message;
+        TraceLog($"{stage} failed: {ex}");
+    }
+
+    private static void ClearFailure()
+    {
+        _currentStage = UpdateFailureStage.None;
+        LastFailureStage = UpdateFailureStage.None;
+        LastFailureDetail = "";
+    }
+
+    private static void TraceLog(string message)
+    {
+        var line = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {message}";
+        Trace.WriteLine($"[Update] {message}");
+        try
+        {
+            var directory = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "PaperTodo");
+            Directory.CreateDirectory(directory);
+            var logPath = Path.Combine(directory, "update-trace.log");
+            var existing = new FileInfo(logPath);
+            if (existing.Exists && existing.Length > 512 * 1024)
+            {
+                File.Move(logPath, logPath + ".1", overwrite: true);
+            }
+            lock (TraceLogLock)
+            {
+                File.AppendAllText(logPath, line + Environment.NewLine);
+            }
+        }
+        catch
+        {
+            // Best-effort; a failed log write must never fail the upgrade.
+        }
     }
 
     private static HttpClient CreateHttpClient()
@@ -119,11 +198,34 @@ internal static class UpdateService
     internal static Task<HttpResponseMessage> ProbeRawUrlAsync(string url, CancellationToken cancellation) =>
         Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellation);
 
-    internal static string CurrentVersion =>
-        typeof(UpdateService).Assembly
+    internal static string CurrentVersion => ResolveCurrentVersion();
+
+    // Custom patch (dev branch): v1.0.4 shipped a stale <InformationalVersion>1.0.3</...>
+    // while the binaries were 1.0.4, so the About page showed 1.0.3 and every check
+    // re-offered the installed release as new. When the assembly version is ahead of
+    // the informational one, trust the assembly version; otherwise keep the
+    // informational string as-is (it may carry a pre-release label).
+    private static string ResolveCurrentVersion()
+    {
+        var assembly = typeof(UpdateService).Assembly;
+        var informational = assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
             .InformationalVersion
             .Split('+')[0] ?? "";
+        var assemblyVersion = assembly.GetName().Version;
+        if (assemblyVersion is null)
+        {
+            return informational;
+        }
+        var assemblyCore =
+            $"{assemblyVersion.Major}.{assemblyVersion.Minor}.{assemblyVersion.Build}";
+        if (TryCompareCoreVersions(assemblyCore, informational.Split('-', '+')[0].Trim(), out var order) &&
+            order > 0)
+        {
+            return assemblyCore;
+        }
+        return informational;
+    }
 
     // A single-file install is one PaperTodo.exe next to no runtime DLL layout.
     private static bool IsSingleFileInstall =>
@@ -247,7 +349,11 @@ internal static class UpdateService
                 // Up to date per the mirror — AUTHORITATIVE: both channels publish the
                 // same release, so GitHub's "no update" adds nothing while its anonymous
                 // quota can turn this verdict into a spurious failure report.
-                return null;
+                // Custom patch (dev branch): the record must travel back, not null — the
+                // caller dereferences .ResultKind, so a bare null turned the authoritative
+                // up-to-date verdict into a NullReferenceException ("检查更新失败")
+                // whenever the mirror answered and the install was already current.
+                return new MirrorCheckResult(MirrorCheckResultKind.UpToDate);
             }
 
             var manifestName = GetStringProperty(root, "Manifest");
@@ -278,6 +384,13 @@ internal static class UpdateService
                 Manifest = manifestJson,
                 MultiFileZipUrl = $"{InternalFileRoot}/{Uri.EscapeDataString(zipName)}",
                 DeltaZipUrl = deltaUrl,
+                // Custom patch (dev branch): the GitHub release serves byte-identical assets;
+                // used when the mirror's download host is unreachable or flaky.
+                FallbackMultiFileZipUrl =
+                    $"https://github.com/{Repository}/releases/download/v{version}/{zipName}",
+                FallbackDeltaZipUrl = manifest.Delta?.Asset is { Length: > 0 } deltaAssetName
+                    ? $"https://github.com/{Repository}/releases/download/v{version}/{deltaAssetName}"
+                    : null,
                 ReleaseNotes = root.TryGetProperty("ReleaseNote", out var noteElement) &&
                                noteElement.ValueKind == JsonValueKind.Object &&
                                noteElement.TryGetProperty("zh-CN", out var zhNote) &&
@@ -352,6 +465,12 @@ internal static class UpdateService
             DeltaZipUrl = manifest.Delta is { } delta && !string.IsNullOrWhiteSpace(delta.Asset) &&
                           assetUrls.TryGetValue(delta.Asset, out var deltaUrl)
                 ? deltaUrl
+                : null,
+            // Custom patch (dev branch): the mirror serves the same assets when GitHub's
+            // download host is blocked or slow.
+            FallbackMultiFileZipUrl = $"{InternalFileRoot}/{Uri.EscapeDataString(zipUrl.Key)}",
+            FallbackDeltaZipUrl = manifest.Delta?.Asset is { Length: > 0 } mirrorDeltaAsset
+                ? $"{InternalFileRoot}/{Uri.EscapeDataString(mirrorDeltaAsset)}"
                 : null,
             ReleaseNotes = GetStringProperty(release.RootElement, "body")
         };
@@ -434,17 +553,27 @@ internal static class UpdateService
         Action<UpdateProgress>? onProgress = null,
         CancellationToken cancellation = default)
     {
+        ClearFailure();
         try
         {
             var staged = await StageUpdateAsync(info, onProgress, cancellation).ConfigureAwait(false);
+            BeginStage(UpdateFailureStage.Apply);
             return ApplyStagedUpdate(staged.ApplyRoot, staged.ApplyFiles, staged.DeletedFiles,
                 restartAfterExit: true);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or
-                                    InvalidOperationException or IOException or InvalidDataException or
-                                    UnauthorizedAccessException)
+        catch (UpdateAlreadyCurrentException ex)
         {
-            Trace.WriteLine($"[Update] staging failed: {ex.Message}");
+            RecordFailure(UpdateFailureStage.AlreadyCurrent, ex);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            // Custom patch (dev branch): record the failing stage (detail goes to the trace
+            // log) instead of collapsing every cause into a bare false, and let no exception
+            // type escape onto the About page.
+            RecordFailure(_currentStage == UpdateFailureStage.None
+                ? UpdateFailureStage.Unknown
+                : _currentStage, ex);
             return false;
         }
     }
@@ -459,6 +588,7 @@ internal static class UpdateService
     {
         if (IsSingleFileInstall)
         {
+            BeginStage(UpdateFailureStage.NotSupported);
             // The single-file asset was dropped from releases: it offered no incremental
             // path and duplicated the ZIP's size. Fail with a clear message instead of a
             // null-URL ArgumentNullException piercing the catch filter; the About page
@@ -488,6 +618,7 @@ internal static class UpdateService
         Action<UpdateProgress>? onProgress,
         CancellationToken cancellation)
     {
+        BeginStage(UpdateFailureStage.Manifest);
         var manifest = ParseManifest(info.Manifest);
         if (!IsNewerVersion(manifest.Version, CurrentVersion))
         {
@@ -498,15 +629,30 @@ internal static class UpdateService
         // Local diff: everything missing or hash-mismatched must be delivered by the payload.
         var missing = manifest.Files.Where(f => !LocalFileMatches(f)).Select(f => f.Path).ToList();
 
+        // Custom patch (dev branch): deletions are version-independent (the listed files do
+        // not exist in the new release), so they apply on both the delta and the full path.
+        // Computed before downloading because "nothing to change" short-circuits below.
+        var deleted = manifest.Delta?.Deleted is { } deletedList
+            ? deletedList.Where(d => manifestFiles.ContainsKey(d) == false).ToList()
+            : new List<string>();
+        if (missing.Count == 0 && deleted.Count == 0)
+        {
+            // Every local file already equals the release payload — typically a stale
+            // <InformationalVersion> re-offering the release that is already installed.
+            throw new UpdateAlreadyCurrentException(
+                $"All files already match the {manifest.Version} manifest.");
+        }
+
         var useDelta = info.DeltaZipUrl is not null &&
                        manifest.Delta is { } delta &&
                        delta.Files.Count > 0 &&
                        missing.All(path => delta.Files.Contains(path, StringComparer.OrdinalIgnoreCase));
-        var payloadUrl = useDelta ? info.DeltaZipUrl! : info.MultiFileZipUrl;
-
         var root = CreateStagingRoot();
         var payloadPath = Path.Combine(root, "payload.zip");
-        await DownloadFileAsync(payloadUrl, payloadPath, onProgress, cancellation).ConfigureAwait(false);
+        BeginStage(UpdateFailureStage.Download);
+        useDelta = await DownloadPayloadAsync(info, useDelta, payloadPath, onProgress, cancellation)
+            .ConfigureAwait(false);
+        BeginStage(UpdateFailureStage.Extract);
 
         // Extract only the entries the apply step needs; verify every extracted file
         // against the manifest so a truncated or tampered payload never lands on disk.
@@ -556,11 +702,7 @@ internal static class UpdateService
             throw new InvalidOperationException("The payload contains no applicable files.");
         }
 
-        // Deletions are version-independent (the listed files do not exist in the new
-        // release), so they apply on both the delta and the full path.
-        var deleted = manifest.Delta?.Deleted is { } deletedList
-            ? deletedList.Where(d => manifestFiles.ContainsKey(d) == false).ToList()
-            : new List<string>();
+        // Deletions were computed before the download (see the AlreadyCurrent guard).
         return new StagedUpdate(applyRoot, applyFiles, deleted);
     }
 
@@ -624,7 +766,7 @@ internal static class UpdateService
         return TryNormalizeSha256(file.Sha256, out var expected) && digest == expected;
     }
 
-    private static async Task DownloadFileAsync(
+    private static async Task DownloadOnceAsync(
         string url,
         string targetPath,
         Action<UpdateProgress>? onProgress,
@@ -650,6 +792,63 @@ internal static class UpdateService
             throw new InvalidOperationException($"Downloaded payload is shorter than expected: {url}");
         }
     }
+
+    // Custom patch (dev branch): one download used to mean one URL from whichever channel
+    // answered the check — a flaky mirror was a guaranteed failure day (2026-11-18 .. 11-24)
+    // although both channels serve byte-identical assets. Now: retry the same asset on the
+    // other channel first, then degrade delta → full, so one bad host never blocks an update.
+    // Returns whether the payload that actually landed is the delta (vs the full package).
+    private static async Task<bool> DownloadPayloadAsync(
+        UpdateInfo info,
+        bool useDelta,
+        string targetPath,
+        Action<UpdateProgress>? onProgress,
+        CancellationToken cancellation)
+    {
+        var attempts = new List<(string Url, bool Delta)>();
+        if (useDelta && info.DeltaZipUrl is { } deltaPrimary)
+        {
+            attempts.Add((deltaPrimary, true));
+            if (info.FallbackDeltaZipUrl is { } deltaBackup)
+            {
+                attempts.Add((deltaBackup, true));
+            }
+        }
+        attempts.Add((info.MultiFileZipUrl, false));
+        if (info.FallbackMultiFileZipUrl is { } fullBackup)
+        {
+            attempts.Add((fullBackup, false));
+        }
+
+        Exception? last = null;
+        foreach (var (url, delta) in attempts)
+        {
+            try
+            {
+                TryDeleteFile(targetPath);
+                onProgress?.Invoke(new UpdateProgress());
+                await DownloadOnceAsync(url, targetPath, onProgress, cancellation)
+                    .ConfigureAwait(false);
+                if (!delta)
+                {
+                    TraceLog("delta payload unavailable; downloaded the full package instead.");
+                }
+                return delta;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or
+                                        IOException or InvalidOperationException)
+            {
+                last = ex;
+                TraceLog($"download attempt failed ({HostOf(url)}): {ex.Message}");
+            }
+        }
+        throw new InvalidOperationException(
+            $"download failed on every channel ({string.Join(", ", attempts.Select(a => HostOf(a.Url)))}): {last?.Message}",
+            last);
+    }
+
+    private static string HostOf(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.Host : url;
 
     /// <summary>Atomically swaps staged files into place; the caller restarts the app.</summary>
     private static bool ApplyStagedUpdate(
@@ -702,7 +901,7 @@ internal static class UpdateService
                 if (restartAfterExit && Application.Current is App app)
                 {
                     app.RequestRestartAfterExit();
-                    app.Dispatcher.BeginInvoke(() => { try { Application.Current.Shutdown(); } catch { } });
+                    app.Dispatcher.BeginInvoke(() => RestartAfterApply());
                 }
                 return true;
             }
@@ -710,8 +909,37 @@ internal static class UpdateService
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"[Update] apply failed: {ex.Message}");
+            // Custom patch (dev branch): name the stage so a half-applied swap is obvious in
+            // the trace log instead of a bare "failed".
+            RecordFailure(UpdateFailureStage.Apply, ex);
             return false;
+        }
+    }
+
+    // Custom patch (dev branch): the apply runs on a worker thread, so the close-and-restart
+    // must marshal to the UI thread, use the controller's real-close path, and still fall
+    // back to a bare Shutdown for the unlikely case the controller is already gone.
+    private static void RestartAfterApply()
+    {
+        try
+        {
+            var controller = AppController.Current;
+            if (controller is not null)
+            {
+                controller.Exit();
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            RecordFailure(UpdateFailureStage.Restart, ex);
+        }
+        try
+        {
+            Application.Current.Shutdown();
+        }
+        catch
+        {
         }
     }
 

@@ -21,7 +21,11 @@
     <Version>1.0.4</Version>
     <AssemblyVersion>1.0.4.0</AssemblyVersion>
     <FileVersion>1.0.4.0</FileVersion>
-    <InformationalVersion>1.0.3</InformationalVersion>
+    <!-- Custom patch (dev branch): do NOT pin <InformationalVersion> here — it derives from
+         <Version>. v1.0.4 shipped with a stale <InformationalVersion>1.0.3</InformationalVersion>
+         pin while the binaries were 1.0.4: the About page showed 1.0.3 forever and every
+         update check re-offered the installed release as "new". Releases bump <Version> only;
+         the release workflow asserts the published exe's ProductVersion equals the tag. -->
     <!-- Keep tray header "PaperTodo v4.0.0-beta1" free of +commit suffixes from SourceLink. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <ApplicationIcon>assets\PaperTodo.ico</ApplicationIcon>

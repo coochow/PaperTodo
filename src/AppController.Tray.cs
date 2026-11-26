@@ -1239,10 +1239,9 @@ public sealed partial class AppController
     {
         get
         {
-            var version = typeof(AppController).Assembly
-                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-                .InformationalVersion
-                .Split('+')[0];
+            // Custom patch (dev branch): shared resolver — falls back to the assembly version
+            // when <InformationalVersion> is stale (v1.0.4 shipped self-reporting 1.0.3).
+            var version = UpdateService.CurrentVersion;
             return string.IsNullOrWhiteSpace(version) ? "PaperTodo" : $"PaperTodo v{version}";
         }
     }

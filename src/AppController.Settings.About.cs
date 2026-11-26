@@ -230,7 +230,7 @@ public sealed partial class AppController
         {
             _pendingUpdate = await Task.Run(UpdateService.CheckForUpdateAsync);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             _pendingUpdate = null;
             checkFailed = true;
@@ -292,7 +292,17 @@ public sealed partial class AppController
             });
         };
 
-        var ok = await Task.Run(() => UpdateService.TryUpdateToAsync(update, onProgress));
+        bool ok;
+        try
+        {
+            ok = await Task.Run(() => UpdateService.TryUpdateToAsync(update, onProgress));
+        }
+        catch
+        {
+            // Custom patch (dev branch): an unexpected updater exception must not escape onto
+            // the settings window; the service has already recorded the failing stage.
+            ok = false;
+        }
         _updateCheckRunning = false;
         if (!ok)
         {
@@ -301,9 +311,20 @@ public sealed partial class AppController
                 "The update failed. Retry later or download manually from the release page.",
                 "アップデートに失敗しました。後で再試行するか、リリースページから手動でダウンロードしてください。",
                 "업데이트에 실패했습니다. 나중에 다시 시도하거나 릴리스 페이지에서 수동으로 다운로드하세요."));
+            // Custom patch (dev branch): replace the generic failure line with stage-aware text.
+            SetAboutUpdateStatus(BuildUpdateFailureStatus());
             button.IsEnabled = true;
         }
-        // On success the app restarts itself; nothing further to update here.
+        else
+        {
+            // Custom patch (dev branch): the swap is done; tell the user before the restart
+            // takes the window away.
+            SetAboutUpdateStatus(SettingsSidebarLocalized(
+                "升级完成，正在重启…",
+                "Update applied. Restarting…",
+                "アップデートを適用しました。再起動します…",
+                "업데이트 적용 완료. 재시작 중…"));
+        }
     }
 
     private void SetAboutUpdateStatus(string text)
@@ -330,6 +351,28 @@ public sealed partial class AppController
         parent.Children.RemoveAt(index);
         _aboutUpdateActionPanel = BuildAboutUpdateActionPanel();
         parent.Children.Insert(index, _aboutUpdateActionPanel);
+    }
+
+    // Custom patch (dev branch): compose the failure line from the updater's recorded stage,
+// naming the phase in code terms (matches the trace log) so the next report is diagnosable.
+    private string BuildUpdateFailureStatus()
+    {
+        var stage = UpdateService.LastFailureStage;
+        if (stage == UpdateService.UpdateFailureStage.AlreadyCurrent)
+        {
+            return SettingsSidebarLocalized(
+                "当前文件已是该版本内容，无需重复升级。若版本号仍显示旧值，请等待下一次发布或从发布页手动下载。",
+                "The files already match this release; no re-install needed. If the version label still looks old, wait for the next release or download manually from the release page.",
+                "ファイルは最新です（再適用は不要）。表示が古い場合は、次のリリースをお待ちください。",
+                "파일이 이미 최신입니다(재설치 불필요). 표시가 그대로라면 다음 버전을 기다리세요.");
+        }
+        return string.Format(
+            SettingsSidebarLocalized(
+                "升级失败（{0}）。请稍后重试或从发布页手动下载。诊断日志：update-trace.log（本地应用数据目录）。",
+                "The update failed ({0}). Retry later or download manually from the release page. Trace log: update-trace.log in the local app-data folder.",
+                "アップデートに失敗しました（{0}）。後で再試行するか、リリースページから手動でダウンロードしてください。診断ログ：update-trace.log（ローカルアプリデータ）。",
+                "업데이트 실패({0}). 나중에 다시 시도하거나 릴리스 페이지에서 직접 내려받으세요. 진단 로그: update-trace.log(로컬 앱 데이터)."),
+        stage);
     }
 
     private static string TrimReleaseNotes(string notes)

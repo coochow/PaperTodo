@@ -86,6 +86,17 @@ jobs:
           if ($projectVersion -ne $env:VERSION) {
             throw "PaperTodo.csproj Version '$projectVersion' does not match tag '$env:VERSION'. Bump the project version before tagging."
           }
+          # Custom patch (dev branch): the About page and the update check read
+          # InformationalVersion (surfaced as ProductVersion), not <Version>. v1.0.4 shipped
+          # with a stale pin (1.0.3) and broke both. Fail the build on any mismatch.
+          $infoNodes = $project.SelectNodes('/Project/PropertyGroup/InformationalVersion')
+
+      if ($infoNodes.Count -gt 0) {
+            $infoVersion = ([string]$infoNodes[0].InnerText).Trim()
+            if ($infoVersion -ne $env:VERSION) {
+              throw "PaperTodo.csproj InformationalVersion '$infoVersion' does not match tag '$env:VERSION'. The About page reads this value."
+            }
+          }
 
       - name: Rebuild native LMDB library
         run: .\native\lmdb\build.ps1 -Configuration Release -ForceRebuild
@@ -111,6 +122,15 @@ jobs:
             /p:DebugType=none `
             /p:DebugSymbols=false
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          # Custom patch (dev branch): assert what the packaged binary will actually report
+          # (ProductVersion == InformationalVersion). Catches stale or dropped version
+          # metadata before the release goes public.
+          $productVersion = [System.Diagnostics.FileVersionInfo]::GetVersionInfo(
+            (Join-Path $publishDir "PaperTodo.exe")).ProductVersion
+          if ($productVersion -ne $env:VERSION) {
+            throw "Published PaperTodo.exe reports ProductVersion '$productVersion', expected '$env:VERSION'."
+          }
 
           # Users unzip next to their data; ship only what the app needs to run.
           Get-ChildItem -LiteralPath $publishDir -Recurse -Include *.pdb,*.xml |
