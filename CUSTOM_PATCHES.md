@@ -94,6 +94,7 @@
 - [ ] 真实实例 `autoMoveCompletedTodosToBottom` 仍为 `false`：P14 部署后需用户打开一次开关（或经同意改 data.json）才会启用新排序。
 - [ ] 真实实例 `resizeGripMode` 仍为 `soft`：升级 v1.0.6 后需在 设置→视觉 选「隐藏」或点恢复默认，右下角点阵才会消失。
 - [x] P18 一键恢复所有默认设置：已随 v1.0.6 发布；入口=设置→关于→维护，按钮为编译级验证，待用户首次使用时点验。
+- [ ] 已知 P12 遗留（非 v1.0.6 回归）：镜像 UpdateInfo 的全量包 GitHub 兜底 URL 使用 latest.json 的 FileName（PaperTodo_1.0.x.zip），GitHub Release 实际资产名是 PaperTodo-v1.0.x-win-x64-multi-file.zip，全量兜底会 404；增量兜底名取自 manifest，正常。下版修正兜底名或改为从 GitHub API 取资产名。
 - [ ] 上游发布 4.0 正式版：执行首次 rebase（fork 点 411078b 落后上游已较多；预期冲突点 `PaperTitles.cs`/`RefreshExperimentalOpacity`/`Note.cs` noteMouseDown，按裁决规则 2/3/6 处理）；
 - [ ] issue #384 若作者实现同类标题逻辑：撤 P3；#383 上下停靠若作者想通交互：直接用上游；
 - [ ] 上游 4.0 材质透明度落地后：评估撤 P1/P6（改用材质透明度），并把 Alt+滚轮接为其快捷键。
