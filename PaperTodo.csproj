@@ -18,9 +18,9 @@
     <CETCompat>false</CETCompat>
     <!-- Custom patch (dev branch): the fork uses its own version sequence starting at 1.0.0;
          the upstream base is recoverable from git history (fork point 411078b = v4.0.0-beta1). -->
-    <Version>1.0.5</Version>
-    <AssemblyVersion>1.0.5.0</AssemblyVersion>
-    <FileVersion>1.0.5.0</FileVersion>
+    <Version>1.0.6</Version>
+    <AssemblyVersion>1.0.6.0</AssemblyVersion>
+    <FileVersion>1.0.6.0</FileVersion>
     <!-- Custom patch (dev branch): do NOT pin <InformationalVersion> here — it derives from
          <Version>. v1.0.4 shipped with a stale <InformationalVersion>1.0.3</InformationalVersion>
          pin while the binaries were 1.0.4: the About page showed 1.0.3 forever and every
