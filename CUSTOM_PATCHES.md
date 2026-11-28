@@ -34,6 +34,7 @@
 | P15 | 恢复默认对齐 fork 新装默认：常规页顶栏固定按钮数 1→4；视觉页主题 `system`→`light`、缩放把手 → 隐藏（与 Models 新装默认一致） | `src/AppController.Settings.GeneralPage.cs`(1 行+锚) `src/AppController.Settings.cs`(Visual restore 2 行+锚) | 上游文件小改 | ✅ 用户验收 2026-11-28 |
 | P16 | 恢复启动纸片四边缩放失效修复：`SourceInitialized` 时 `PresentationSource.FromVisual(this)` 不是 `HwndSource`，消息钩子未挂，只有 WPF 右下角把手能缩放；改为 `TryAttachWindowMessageHook()` 在 SourceInitialized/Loaded/Activated 幂等重试，恢复启动的纸片四边/四角缩放正常；隐藏顶栏时纸面下移 HeaderExtent，顶部判定带改为跟随可见纸面顶边（`chromeMargin + HeaderExtent*(1-HeaderOpacity) + 5`），修复“只有看不见的窗口顶部能拖、可见纸边拖不动”；`ResizeMode` 守卫必须同时允许 `CanResize` 与 `CanResizeWithGrip`。 | `src/PaperWindow.cs`(字段+TryAttachWindowMessageHook+Loaded/Activated 调用+顶部窄带判断，均带锚) | 上游文件小改 | ✅ 用户验收 2026-11-28 |
 | P17 | 缩放把手默认隐藏：`ResizeGripMode` 默认 Soft→Hidden（新装/恢复默认为无点阵），保留 Standard/Soft/Hidden 设置与透明握手作为兜底；四边/四角缩放由自定义 hit-test 负责。 | `src/Models.cs`(初始化器 1 行+锚) `src/AppController.Settings.cs`(Visual restore 1 行+锚) | 上游文件小改 | ✅ 用户验收 2026-11-28 |
+| P18 | 一键恢复所有默认设置：设置→关于→维护→「恢复所有默认设置…」，二次确认后按手册顺序调用各页恢复默认（实验室→快捷键→常规→待办→笔记→视觉）；纸片/待办/笔记内容与位置不变，插件启用状态与插件数据不变；实验室恢复会关闭 MCP 与实验功能。 | `src/AppController.RestoreAllSettings.cs`（全新） `src/AppController.Settings.About.cs`（维护节+2 方法） | 独立文件+上游零改 | ⏳ 待用户验收 |
 
 已撤销并清理干净的尝试（勿再引入，含死代码已删）：
 - 右键长按拖动三代（手动位移 / 窗口级捕获死锁 / 借 chrome 会话僵死）；
@@ -62,6 +63,7 @@
 11. **`PaperWindow.TryGetPaperResizeHitTest`**：三条必须同时保留——①`ResizeMode` 守卫是 `!= CanResize && != CanResizeWithGrip`（勿简化成两个 `CanResize`，否则展开纸片走 CanResizeWithGrip 会整体跳过自定义 hit-test，只剩右下角把手）；②顶部窄带在所有头栏状态可缩放，且跟随可见纸面顶边：`topResizeBorder = (chromeMargin + HeaderExtent*(1-HeaderOpacity) + 5) * dpiScale`（隐藏顶栏时纸面下移，不能用窗口顶部常量）；③`overGrip` 右下角带保留，正文其余区域仍为普通客户区。
 12. **`PaperWindow.TryAttachWindowMessageHook`**：保留 SourceInitialized/Loaded/Activated 的幂等重试，确保恢复启动的纸片也能挂上 `OnWindowMessage`；上游若修复同问题，采上游并撤本条。
 13. **`ResizeGripMode`（P17）**：保留 Models 默认 `Hidden` 与视觉页恢复默认 `Hidden`；上游若移除缩放把手设置/点阵，采上游并撤 P17。
+14. **一键恢复所有默认设置（P18）**：入口在设置→关于→维护；保持调用各页既有 `Restore*Defaults` 方法，新增默认值只需改对应页方法；若上游提供全局重置，采上游并撤 P18。
 
 ## 四、用户侧事实（排障速查）
 
@@ -73,7 +75,8 @@
 - **待办默认显示（开关开启时）**：未完成在前、已完成在后；已完成组内最新完成的在最上面。导入待办时也按此规则整理，未完成在前、已完成在后。
 - **恢复默认（P15 对齐）**：常规页恢复后顶栏固定 4 个按钮、视觉页恢复后主题为浅色、待办页恢复后自动置底开启并整理现有项；恢复默认不会删除纸片内容（待办顺序会按规则变化）。
 - **四边缩放（P16）**：启动恢复的纸片若只有右下角把手能缩放，原因是源初始化时 HwndSource 未就绪、消息钩子未挂；P16 在 Loaded/Activated 重试挂载。隐藏顶栏时顶部判定带跟随**可见纸面顶边**（不是窗口上方透明区），从纸片顶边即可拖动改高度；顶栏显示时行为不变。
-- **缩放把手默认隐藏（P17）**：`ResizeGripMode` 默认和视觉页恢复默认都是 `Hidden`，右下角不再显示点阵；透明握手仍作兜底，四边/四角由自定义 hit-test 负责。
+- **缩放把手默认隐藏（P17）**：`ResizeGripMode` 默认和视觉页恢复默认都是 `Hidden`，右下角不再显示点阵；透明抓手仍作兜底，四边/四角由自定义 hit-test 负责。
+- **一键恢复所有默认设置（P18）**：设置→关于→维护。重置全部设置页；纸片/待办/笔记内容与位置不变，插件启用状态与插件数据不变；待办完成项会归底，实验室页会关闭 MCP 与实验功能。
 - 更新流程（严格顺序，2026-11-05 两次事故后固化）：改 dev 分支 → `dotnet publish`（官方参数）→ `--exit` 退出并**确认进程消失** → 替换 exe → **哈希校验 exe 真的换了**（时间戳/字节不可靠，cp 可能被进程锁静默吞掉）→ 启动 → 验证；
 - **data.json 纪律**（三层）：①改值必须在进程退出后（运行中会写回内存值盖掉）；②**新增命令/设置键必须在「含该键代码的 exe」启动前写入**（旧 exe 的 NormalizeBindings 归一化保存会把不认识的键从字典剔除——静默丢配置）；③写完等一个保存周期回读确认存活（启动后 ≥10s 回查）；
 - 胶囊上下磁吸：上游实验功能已支持（拖悬浮胶囊靠任意屏幕边/窗口边吸附），开关=设置-实验室-「边缘磁吸胶囊」；贴边队列仍为左右（#383 作者：上下「难点是交互逻辑没想法」）；
@@ -90,6 +93,7 @@
 - [ ] v1.0.6 发版时同步 GitLab `latest.json`：`ReleaseNote.zh-CN` 必须改为 1.0.6 文案（客户端优先读它，显示前截断 600 字）；GitHub Release 正文由 workflow 固定模板生成，不含逐版本清单。
 - [ ] 真实实例 `autoMoveCompletedTodosToBottom` 仍为 `false`：P14 部署后需用户打开一次开关（或经同意改 data.json）才会启用新排序。
 - [ ] 真实实例 `resizeGripMode` 仍为 `soft`：升级 v1.0.6 后需在 设置→视觉 选「隐藏」或点恢复默认，右下角点阵才会消失。
+- [ ] P18 一键恢复所有默认设置：待用户验收，随 v1.0.6 发布。
 - [ ] 上游发布 4.0 正式版：执行首次 rebase（fork 点 411078b 落后上游已较多；预期冲突点 `PaperTitles.cs`/`RefreshExperimentalOpacity`/`Note.cs` noteMouseDown，按裁决规则 2/3/6 处理）；
 - [ ] issue #384 若作者实现同类标题逻辑：撤 P3；#383 上下停靠若作者想通交互：直接用上游；
 - [ ] 上游 4.0 材质透明度落地后：评估撤 P1/P6（改用材质透明度），并把 Alt+滚轮接为其快捷键。

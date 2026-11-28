@@ -100,6 +100,8 @@ public sealed partial class AppController
             fallbackUrl: CustomBuildDocsUrl,
             isPrimary: true));
 
+        content.Children.Add(BuildAboutMaintenanceSection());
+
         return new Border
         {
             Background = Brushes.Transparent,
@@ -129,6 +131,79 @@ public sealed partial class AppController
         panel.Children.Add(_aboutUpdateActionPanel);
 
         return panel;
+    }
+
+    // Custom patch (dev branch): one-click restore for every settings page.
+    private UIElement BuildAboutMaintenanceSection()
+    {
+        var panel = new StackPanel
+        {
+            Margin = new Thickness(0, 10, 0, 0)
+        };
+        panel.Children.Add(SettingsFieldLabel(
+            SettingsSidebarLocalized("维护", "Maintenance", "メンテナンス", "유지 관리"),
+            topMargin: 0));
+        panel.Children.Add(new TextBlock
+        {
+            Text = SettingsSidebarLocalized(
+                "一键恢复常规、待办、笔记、视觉、快捷键和实验室页的设置；纸片内容与插件状态不受影响。",
+                "Restore General, Todo, Notes, Visual, Shortcuts and Labs settings at once. Paper content and plugin state are kept.",
+                "一般、ToDo、ノート、表示、ショートカット、ラボの設定をまとめて既定値に戻します。付箋の内容とプラグインの状態は保持されます。",
+                "일반, 할 일, 노트, 보기, 단축키, 실험실 설정을 한 번에 복원합니다. 종이 내용과 플러그인 상태는 유지됩니다."),
+            Foreground = TrayWeakTextBrush,
+            FontSize = AppTypography.Scale(11.5),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(2, 4, 2, 6)
+        });
+        var restoreAll = SettingsTextButton(
+            SettingsSidebarLocalized(
+                "恢复所有默认设置…",
+                "Restore all defaults…",
+                "すべての既定値に戻す…",
+                "모든 기본값 복원…"));
+        restoreAll.HorizontalAlignment = HorizontalAlignment.Left;
+        restoreAll.Click += (_, _) => ConfirmRestoreAllSettings();
+        panel.Children.Add(restoreAll);
+        return panel;
+    }
+
+    private void ConfirmRestoreAllSettings()
+    {
+        if (_settingsWindow is not { } owner)
+        {
+            return;
+        }
+
+        var accepted = PaperNoticeDialog.ShowChoice(
+            owner,
+            SettingsSidebarLocalized(
+                "恢复所有默认设置",
+                "Restore all defaults",
+                "すべての既定値に戻す",
+                "모든 기본값 복원"),
+            SettingsSidebarLocalized(
+                "将把常规、待办、笔记、视觉、快捷键和实验室页的设置恢复为默认值。纸片、待办和笔记内容不会删除，纸片位置不变；待办完成项会整理到底部；实验室页会关闭 MCP 与实验功能；插件启用状态和插件数据保持不变。",
+                "This restores General, Todo, Notes, Visual, Shortcuts and Labs settings. Paper, todo and note content is kept, and paper positions do not change. Completed todos move below active ones, and Labs turns off MCP and experimental features. Plugin enablement and plugin data are kept.",
+                "一般、ToDo、ノート、表示、ショートカット、ラボの設定を既定値に戻します。付箋・ToDo・ノートの内容と付箋の位置は保持されます。完了済み ToDo は未完了の下へ移動し、ラボでは MCP と実験機能がオフになります。プラグインの有効状態とデータは保持されます。",
+                "일반, 할 일, 노트, 보기, 단축키, 실험실 설정을 기본값으로 복원합니다. 종이, 할 일, 노트 내용과 종이 위치는 유지됩니다. 완료된 할 일은 미완료 항목 아래로 이동하고, 실험실의 MCP와 실험 기능은 꺼집니다"),
+            SettingsSidebarLocalized("取消", "Cancel", "キャンセル", "취소"),
+            SettingsSidebarLocalized("恢复所有默认设置", "Restore all defaults", "すべての既定値に戻す", "모든 기본값 복원"),
+            forceTopmost: true);
+        if (!accepted)
+        {
+            return;
+        }
+
+        RestoreAllSettingsToDefaults();
+        PaperNoticeDialog.Show(
+            owner,
+            SettingsSidebarLocalized("恢复完成", "Defaults restored", "既定値に戻しました", "복원 완료"),
+            SettingsSidebarLocalized(
+                "所有设置已恢复为默认值。",
+                "All settings have been restored to their defaults.",
+                "すべての設定を既定値に戻しました。",
+                "모든 설정이 기본값으로 복원되었습니다."),
+            forceTopmost: true);
     }
 
     // Custom patch (dev branch): opens settings directly on the About page; used by the
