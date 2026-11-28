@@ -900,8 +900,18 @@ internal static class UpdateService
                 }
                 if (restartAfterExit && Application.Current is App app)
                 {
-                    app.RequestRestartAfterExit();
-                    app.Dispatcher.BeginInvoke(() => RestartAfterApply());
+                    try
+                    {
+                        app.Dispatcher.BeginInvoke(() =>
+                        {
+                            app.RequestRestartAfterExit();
+                            RestartAfterApply();
+                        });
+                    }
+                    catch (Exception restartEx)
+                    {
+                        Trace.WriteLine($"[Update] restart scheduling after apply skipped: {restartEx.Message}");
+                    }
                 }
                 return true;
             }
