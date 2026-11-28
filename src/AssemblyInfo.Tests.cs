@@ -9,3 +9,5 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("PaperTodo.MarkdownEditingChecks")]
 [assembly: InternalsVisibleTo("PaperTodo.WindowCloseActivationChecks")]
 [assembly: InternalsVisibleTo("PaperTodo.MicaChecks")]
+// Custom patch (dev branch): Markdown transfer checks.
+[assembly: InternalsVisibleTo("PaperTodo.DataTransferChecks")]

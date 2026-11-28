@@ -9,14 +9,22 @@ namespace PaperTodo;
 
 internal static class PaperNoticeDialog
 {
-    public static void Show(Window owner, string titleText, string messageText)
+    // Custom patch (dev branch): force a notice above always-on-top papers. Without
+    // this, import/export summaries opened from Settings appear behind the papers
+    // they just created or exported, leaving only the button row clickable.
+    public static void Show(
+        Window owner,
+        string titleText,
+        string messageText,
+        bool forceTopmost = false)
     {
         _ = ShowCore(
             owner,
             titleText,
             messageText,
             secondaryText: null,
-            primaryText: Strings.Get("CommonOk"));
+            primaryText: Strings.Get("CommonOk"),
+            forceTopmost);
     }
 
     public static bool ShowChoice(
@@ -24,14 +32,16 @@ internal static class PaperNoticeDialog
         string titleText,
         string messageText,
         string secondaryText,
-        string primaryText)
+        string primaryText,
+        bool forceTopmost = false)
     {
         return ShowCore(
             owner,
             titleText,
             messageText,
             secondaryText,
-            primaryText);
+            primaryText,
+            forceTopmost);
     }
 
     private static bool ShowCore(
@@ -39,7 +49,8 @@ internal static class PaperNoticeDialog
         string titleText,
         string messageText,
         string? secondaryText,
-        string primaryText)
+        string primaryText,
+        bool forceTopmost)
     {
         var accepted = false;
         var dialog = new Window
@@ -55,7 +66,8 @@ internal static class PaperNoticeDialog
             AllowsTransparency = true,
             Background = Brushes.Transparent,
             ShowInTaskbar = false,
-            Topmost = owner.Topmost,
+            // Custom patch (dev branch): see Show/ShowChoice forceTopmost.
+            Topmost = forceTopmost || owner.Topmost,
             FontFamily = AppTypography.UiFontFamily,
             FontSize = AppTypography.Scale(12),
             Language = AppTypography.Language,

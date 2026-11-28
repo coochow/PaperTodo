@@ -194,6 +194,10 @@ public sealed partial class AppController
                     topMargin: 8)));
         }
 
+        // Custom patch (dev branch): Markdown export/import section at the bottom of
+        // the general options column.
+        leftColumn.Children.Add(BuildDataTransferSettingsSection());
+
         RefreshSettingsSystemVisibilityToggleStates();
         return leftColumn;
     }
@@ -221,7 +225,8 @@ public sealed partial class AppController
         State.ShowTopBarNewNoteButton = true;
         State.ShowTopBarExternalOpenButton = true;
         State.TopBarShortcutOrder = PaperTopBarShortcuts.NormalizeOrder(null);
-        State.TopBarPinnedCount = 1;
+        // Custom patch (dev branch): match the fork's new-install default (4 pinned).
+        State.TopBarPinnedCount = 4;
         State.TodoTopBarShortcuts = null;
         State.NoteTopBarShortcuts = null;
         State.UseCapsuleMode = true;
