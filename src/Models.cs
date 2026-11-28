@@ -604,7 +604,7 @@ public sealed class AppState
     /// Paper ResizeGrip: standard / soft (50% transparent) / hidden (no dots; all edges resize).
     /// Dot color is Windows ControlDark with a light scheme tint.
     /// </summary>
-    public string ResizeGripMode { get; set; } = ResizeGripModes.Soft;
+    public string ResizeGripMode { get; set; } = ResizeGripModes.Hidden;
     public string FullscreenTopmostMode { get; set; } = FullscreenTopmostModes.Avoid;
     public bool UsePersistentPowerShellProcess { get; set; }
     public bool PreferPowerShell7 { get; set; } = true;

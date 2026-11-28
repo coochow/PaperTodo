@@ -86,6 +86,7 @@ public sealed partial class PaperWindow : Window
     // Tracks only the hidden owner that PaperTodo applies for window-switcher hiding.
     private bool _windowSwitcherHiddenOwnerApplied;
     private IntPtr _windowSwitcherHiddenOwner;
+    private HwndSource? _messageHookSource;
     private string? _pendingFocusItemId;
     private readonly Dictionary<string, TodoTextBox> _todoEditors = new();
     private readonly List<Border> _todoRows = new();
@@ -746,17 +747,17 @@ public sealed partial class PaperWindow : Window
         SourceInitialized += (_, _) =>
         {
             ApplySystemVisibility(reapplyTaskbarShellState: true);
-            if (PresentationSource.FromVisual(this) is HwndSource source)
-            {
-                source.AddHook(OnWindowMessage);
-            }
-
+            // Custom patch (dev branch): restored papers can raise SourceInitialized
+            // before a HwndSource is reachable, so retry from Loaded/Activated.
+            TryAttachWindowMessageHook();
             ApplyExperimentalPassiveNativeState();
             UpdateAdvancedInteractionLockVisuals();
             RefreshEffectiveTopmost();
         };
+        Loaded += (_, _) => TryAttachWindowMessageHook();
         Activated += (_, _) =>
         {
+            TryAttachWindowMessageHook();
             CancelExperimentalAutoCollapse();
             _controller.NotifyPaperWindowActivated(this);
             _controller.RefreshFloatingSurfaceZOrder();
@@ -933,27 +934,30 @@ public sealed partial class PaperWindow : Window
 
         var dpi = GetDpiForWindow(hwnd);
         var dpiScale = dpi > 0 ? dpi / 96.0 : 1.0;
-        // Keep resize bands at the original HWND edges. Moving the top band to the
-        // mask boundary would intercept controls in the first 8 DIPs of the body.
-        if (_paperChrome is { HeaderOpacity: 0 } chrome &&
-            pointerY < bounds.Top + (int)Math.Round((chrome.Margin.Top + chrome.HeaderExtent) * dpiScale))
-        {
-            return false;
-        }
+        // Custom patch (dev branch): keep the narrow top edge band available in every
+        // header state (including immersive hidden top bar and faded title), so
+        // top-left/top-right corner resizing behaves like a normal window. The band
+        // stays limited to the painted paper edge below; the rest of the body remains body.
         // All grip modes share the same resize hit test; the setting only changes the dots.
         // Layered windows can pass mouse input through their transparent shadow gutter,
         // so reach a few DIPs into the painted paper edge instead of relying on the gutter.
         // Snapped and native papers have no gutter and keep a 5-DIP interior band.
         var chromeMargin = _paperChrome?.Margin.Left ?? (UsesNativePaperChrome ? 0 : WindowChromeMargin);
+        // When the top bar is hidden the painted surface starts HeaderExtent below the
+        // window top (PaperChromeBorder keeps the header row reserved). The top band must
+        // follow that painted edge, otherwise only the invisible window top resizes.
+        var headerInset = _paperChrome is { } chrome
+            ? Math.Clamp(chrome.HeaderExtent * (1 - chrome.HeaderOpacity), 0, Math.Max(0, chrome.RenderSize.Height))
+            : 0;
         var resizeBorder = Math.Max(1.0, (chromeMargin + 5) * dpiScale);
+        var topResizeBorder = Math.Max(resizeBorder, (chromeMargin + headerInset + 5) * dpiScale);
         var nearLeft = pointerX < bounds.Left + resizeBorder;
         var nearRight = pointerX >= bounds.Right - resizeBorder;
-        var nearTop = pointerY < bounds.Top + resizeBorder;
+        var nearTop = pointerY < bounds.Top + topResizeBorder;
         var nearBottom = pointerY >= bounds.Bottom - resizeBorder;
 
-        // The stock Window-template ResizeGrip is anchored to the HWND corner, not to
-        // the paper's inset chrome. Adding chromeMargin again steals clicks beside the
-        // grip in layered skins; the separate narrow edge band already covers paper edges.
+        // Keep a comfortable bottom-right corner band after removing the stock grip;
+        // the other corners use the same edge-band math.
         var gripRightBand = SystemParameters.VerticalScrollBarWidth * dpiScale;
         var gripBottomBand = SystemParameters.HorizontalScrollBarHeight * dpiScale;
         var overGrip = pointerX >= bounds.Right - gripRightBand &&
@@ -997,6 +1001,25 @@ public sealed partial class PaperWindow : Window
         }
 
         return hitTest != 0;
+    }
+
+    internal void TryAttachWindowMessageHook()
+    {
+        if (_messageHookSource != null)
+        {
+            return;
+        }
+
+        var source = PresentationSource.FromVisual(this) as HwndSource;
+        if (source == null)
+        {
+            source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+        }
+        if (source != null)
+        {
+            source.AddHook(OnWindowMessage);
+            _messageHookSource = source;
+        }
     }
 
     private IntPtr OnWindowMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -2722,6 +2745,11 @@ public sealed partial class PaperWindow : Window
         }
 
         AttachPluginPaperMenuActions(menu);
+
+        // Custom patch (dev branch): export this paper as Markdown.
+        menu.Items.Add(MenuItem(
+            Strings.Get("MenuExportMarkdown"),
+            (_, _) => ExportPaperAsMarkdown()));
 
         if (CanDisplayAsCapsule())
         {
