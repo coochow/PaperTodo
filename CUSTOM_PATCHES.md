@@ -35,6 +35,7 @@
 | P16 | 恢复启动纸片四边缩放失效修复：`SourceInitialized` 时 `PresentationSource.FromVisual(this)` 不是 `HwndSource`，消息钩子未挂，只有 WPF 右下角把手能缩放；改为 `TryAttachWindowMessageHook()` 在 SourceInitialized/Loaded/Activated 幂等重试，恢复启动的纸片四边/四角缩放正常；隐藏顶栏时纸面下移 HeaderExtent，顶部判定带改为跟随可见纸面顶边（`chromeMargin + HeaderExtent*(1-HeaderOpacity) + 5`），修复“只有看不见的窗口顶部能拖、可见纸边拖不动”；`ResizeMode` 守卫必须同时允许 `CanResize` 与 `CanResizeWithGrip`。 | `src/PaperWindow.cs`(字段+TryAttachWindowMessageHook+Loaded/Activated 调用+顶部窄带判断，均带锚) | 上游文件小改 | ✅ 用户验收 2026-11-28 |
 | P17 | 缩放把手默认隐藏：`ResizeGripMode` 默认 Soft→Hidden（新装/恢复默认为无点阵），保留 Standard/Soft/Hidden 设置与透明握手作为兜底；四边/四角缩放由自定义 hit-test 负责。 | `src/Models.cs`(初始化器 1 行+锚) `src/AppController.Settings.cs`(Visual restore 1 行+锚) | 上游文件小改 | ✅ 用户验收 2026-11-28 |
 | P18 | 一键恢复所有默认设置：设置→关于→维护→「恢复所有默认设置…」，二次确认后按手册顺序调用各页恢复默认（实验室→快捷键→常规→待办→笔记→视觉）；纸片/待办/笔记内容与位置不变，插件启用状态与插件数据不变；实验室恢复会关闭 MCP 与实验功能。 | `src/AppController.RestoreAllSettings.cs`（全新） `src/AppController.Settings.About.cs`（维护节+2 方法） | 独立文件+上游零改 | ✅ 随 v1.0.6 发布（按钮待点验） |
+| P19 | OTA 换文件后重启跨线程修复：`ApplyStagedUpdate` 在 worker 线程直接调用 `RequestRestartAfterExit()`，订阅 `Application.Exit` 时抛跨线程异常，导致 v1.0.5 与 v1.0.6 升级“文件已换但报 Apply failed 且不自动重启”（2026-11-28 1.0.5→1.0.6 实测，update-trace.log 实锤）。改为在 UI Dispatcher 上先挂 Exit 再 `RestartAfterApply()`；调度异常只写 trace，不影响已完成的换文件结果。 | `src/UpdateService.cs`(ApplyStagedUpdate 1 块+锚) | 上游小改 | ⏳ 待发 v1.0.7 |
 
 已撤销并清理干净的尝试（勿再引入，含死代码已删）：
 - 右键长按拖动三代（手动位移 / 窗口级捕获死锁 / 借 chrome 会话僵死）；
@@ -94,6 +95,7 @@
 - [ ] 真实实例 `autoMoveCompletedTodosToBottom` 仍为 `false`：P14 部署后需用户打开一次开关（或经同意改 data.json）才会启用新排序。
 - [ ] 真实实例 `resizeGripMode` 仍为 `soft`：升级 v1.0.6 后需在 设置→视觉 选「隐藏」或点恢复默认，右下角点阵才会消失。
 - [x] P18 一键恢复所有默认设置：已随 v1.0.6 发布；入口=设置→关于→维护，按钮为编译级验证，待用户首次使用时点验。
+- [ ] P19 待发 v1.0.7：跨线程重启已修（ca38ff96）。升级说明必须写明：1.0.5/1.0.6 升到 1.0.7 仍可能提示“升级失败”，文件其实已换好，手动重启一次即可；1.0.7 之后的升级恢复正常。
 - [ ] 已知 P12 遗留（非 v1.0.6 回归）：镜像 UpdateInfo 的全量包 GitHub 兜底 URL 使用 latest.json 的 FileName（PaperTodo_1.0.x.zip），GitHub Release 实际资产名是 PaperTodo-v1.0.x-win-x64-multi-file.zip，全量兜底会 404；增量兜底名取自 manifest，正常。下版修正兜底名或改为从 GitHub API 取资产名。
 - [ ] 上游发布 4.0 正式版：执行首次 rebase（fork 点 411078b 落后上游已较多；预期冲突点 `PaperTitles.cs`/`RefreshExperimentalOpacity`/`Note.cs` noteMouseDown，按裁决规则 2/3/6 处理）；
 - [ ] issue #384 若作者实现同类标题逻辑：撤 P3；#383 上下停靠若作者想通交互：直接用上游；
