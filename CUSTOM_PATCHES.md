@@ -34,7 +34,7 @@
 | P15 | 恢复默认对齐 fork 新装默认：常规页顶栏固定按钮数 1→4；视觉页主题 `system`→`light`、缩放把手 → 隐藏（与 Models 新装默认一致） | `src/AppController.Settings.GeneralPage.cs`(1 行+锚) `src/AppController.Settings.cs`(Visual restore 2 行+锚) | 上游文件小改 | ✅ 用户验收 2026-11-28 |
 | P16 | 恢复启动纸片四边缩放失效修复：`SourceInitialized` 时 `PresentationSource.FromVisual(this)` 不是 `HwndSource`，消息钩子未挂，只有 WPF 右下角把手能缩放；改为 `TryAttachWindowMessageHook()` 在 SourceInitialized/Loaded/Activated 幂等重试，恢复启动的纸片四边/四角缩放正常；隐藏顶栏时纸面下移 HeaderExtent，顶部判定带改为跟随可见纸面顶边（`chromeMargin + HeaderExtent*(1-HeaderOpacity) + 5`），修复“只有看不见的窗口顶部能拖、可见纸边拖不动”；`ResizeMode` 守卫必须同时允许 `CanResize` 与 `CanResizeWithGrip`。 | `src/PaperWindow.cs`(字段+TryAttachWindowMessageHook+Loaded/Activated 调用+顶部窄带判断，均带锚) | 上游文件小改 | ✅ 用户验收 2026-11-28 |
 | P17 | 缩放把手默认隐藏：`ResizeGripMode` 默认 Soft→Hidden（新装/恢复默认为无点阵），保留 Standard/Soft/Hidden 设置与透明握手作为兜底；四边/四角缩放由自定义 hit-test 负责。 | `src/Models.cs`(初始化器 1 行+锚) `src/AppController.Settings.cs`(Visual restore 1 行+锚) | 上游文件小改 | ✅ 用户验收 2026-11-28 |
-| P18 | 一键恢复所有默认设置：设置→关于→维护→「恢复所有默认设置…」，二次确认后按手册顺序调用各页恢复默认（实验室→快捷键→常规→待办→笔记→视觉）；纸片/待办/笔记内容与位置不变，插件启用状态与插件数据不变；实验室恢复会关闭 MCP 与实验功能。 | `src/AppController.RestoreAllSettings.cs`（全新） `src/AppController.Settings.About.cs`（维护节+2 方法） | 独立文件+上游零改 | ⏳ 待用户验收 |
+| P18 | 一键恢复所有默认设置：设置→关于→维护→「恢复所有默认设置…」，二次确认后按手册顺序调用各页恢复默认（实验室→快捷键→常规→待办→笔记→视觉）；纸片/待办/笔记内容与位置不变，插件启用状态与插件数据不变；实验室恢复会关闭 MCP 与实验功能。 | `src/AppController.RestoreAllSettings.cs`（全新） `src/AppController.Settings.About.cs`（维护节+2 方法） | 独立文件+上游零改 | ✅ 随 v1.0.6 发布（按钮待点验） |
 
 已撤销并清理干净的尝试（勿再引入，含死代码已删）：
 - 右键长按拖动三代（手动位移 / 窗口级捕获死锁 / 借 chrome 会话僵死）；
@@ -89,11 +89,11 @@
 - [x] 2026-11-13 新修待发：胶囊队列换边崩溃——渲染回调内同步 Dispatcher.Invoke 抛 suspended，MasterCapsuleWindow.cs 与 EdgeCapsuleDragWindow.cs 两处渲染屏障改 BeginInvoke（带锚）；上游 beta1 原生 bug，合并队列换边动画完成帧触发；✅ 已随 v1.0.3 发布（上游 #456）；
 - [x] v1.0.4 已发布（2026-11-17）：P11 三默认值——待办提醒默认启用+提醒声音默认启用+已完成待办默认移底（Models.cs 字段初始化器+TodoPage 恢复默认同步，均带锚）；GitHub tag=v1.0.4（567d3cb6）三资产在线核验 + GitLab master=d501dcc latest.json 在线核验，delta-from-v1.0.3=8文件/1.6MB；发布前 fresh 验收实证三默认落盘；audit-defaults.ps1 对齐审计脚本留存可复跑；已知现象：CI 现编 lmdb 链接时间戳每次漂移（大小恒 164352B），delta 永含 lmdb 无害；踩坑记录：本仓 remote.origin.push=*:refs/for/* 会改写 tag/分支引用（tag 曾误推 refs/for/refs/tags/）——推送必须显式 refs/tags/…或 refs/heads/…全路径；
 - [x] v1.0.5 已发布（2026-11-26，P12 OTA 修复批次）：GitHub tag=v1.0.5（073d5579）三资产在线核验（zip 338/338 哈希吻合、exe ProductVersion=1.0.5、delta-from-v1.0.4=11 文件/8.0MB），GitLab master=81408bc（zip/manifest/增量均 200、latest.json 指向 1.0.5）；首次 tag 推送因 workflow 卡口步骤缩进错误（6 空格截断 run 块）致 CI 秒败，修复后重打 tag 成功；用户端 v1.0.4 升 1.0.5 仍由旧进程执行换文件：如未自动重启需手动重启一次，此后自报号/检查更新/自启全转正
-- [ ] P13–P17 发布（代码已提交并推送 dev：419b3bd6..523c5d84，2026-11-28；用户已验收）：P13 导入导出+弹窗置顶，P14 完成项排序，P15 恢复默认对齐，P16/P17 四边缩放与点阵默认隐藏；待发 v1.0.6。P13 目前同步执行文件 I/O，超大导出集可能短暂卡 UI，后续可改异步；导入每张纸片一次同步保存，200 张上限内有界。
-- [ ] v1.0.6 发版时同步 GitLab `latest.json`：`ReleaseNote.zh-CN` 必须改为 1.0.6 文案（客户端优先读它，显示前截断 600 字）；GitHub Release 正文由 workflow 固定模板生成，不含逐版本清单。
+- [x] v1.0.6 已发布（2026-11-28）：P13 导入导出 / P14 完成项排序 / P15 恢复默认对齐 / P16 四边与隐藏顶栏缩放 / P17 点阵默认隐藏 / P18 一键恢复所有默认设置；GitHub tag=v1.0.6（72eb254e），Custom Release run 46139680457 成功，三资产在线（zip 81,484,764B / manifest 338 文件 / delta-from-v1.0.5 8 文件/1.6MB）；GitLab master=8903b80（zip/manifest/delta 均 200，latest.json=1.0.6）。本地检查：DataTransfer 11/11、Persistence 25/25；WindowStack/Lifecycle 在 v1.0.5 基线同样失败（环境性，非本版回归）。P13 同步文件 I/O，超大导出集可能短暂卡 UI，后续可改异步；导入每张纸片一次同步保存，200 张上限内有界。
+- [x] v1.0.6 GitLab `latest.json` 已同步（2026-11-28）：LatestVersion=1.0.6，`ReleaseNote.zh-CN` 写入 5 条用户文案；GitHub Release 正文仍为固定模板，不含逐版本清单。
 - [ ] 真实实例 `autoMoveCompletedTodosToBottom` 仍为 `false`：P14 部署后需用户打开一次开关（或经同意改 data.json）才会启用新排序。
 - [ ] 真实实例 `resizeGripMode` 仍为 `soft`：升级 v1.0.6 后需在 设置→视觉 选「隐藏」或点恢复默认，右下角点阵才会消失。
-- [ ] P18 一键恢复所有默认设置：待用户验收，随 v1.0.6 发布。
+- [x] P18 一键恢复所有默认设置：已随 v1.0.6 发布；入口=设置→关于→维护，按钮为编译级验证，待用户首次使用时点验。
 - [ ] 上游发布 4.0 正式版：执行首次 rebase（fork 点 411078b 落后上游已较多；预期冲突点 `PaperTitles.cs`/`RefreshExperimentalOpacity`/`Note.cs` noteMouseDown，按裁决规则 2/3/6 处理）；
 - [ ] issue #384 若作者实现同类标题逻辑：撤 P3；#383 上下停靠若作者想通交互：直接用上游；
 - [ ] 上游 4.0 材质透明度落地后：评估撤 P1/P6（改用材质透明度），并把 Alt+滚轮接为其快捷键。
