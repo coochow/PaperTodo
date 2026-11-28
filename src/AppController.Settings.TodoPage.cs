@@ -149,6 +149,9 @@ public sealed partial class AppController
         }
         RefreshCapsuleEligibilityForLinkedPapers();
         ArrangeDeepCapsules(animate: false);
+        // Custom patch (dev branch): restoring todo defaults turns the policy on,
+        // so apply it to existing items before the save below.
+        ReorderCompletedTodosToBottom();
         SaveNow();
         RefreshTodoReminderFeature();
         RefreshSettingsWindowContent();

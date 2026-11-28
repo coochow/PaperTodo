@@ -151,9 +151,12 @@ internal static class TodoRules
         var remaining = before
             .Where(item => !changed.Contains(item.Id))
             .ToList();
-        var insertIndex = done
-            ? remaining.Count
-            : remaining.FindIndex(item => item.Done);
+        // Custom patch (dev branch): both transitions land on the active/completed
+        // boundary. A newly completed item therefore becomes the TOP item of the
+        // completed group (no scrolling to the bottom to review what was just
+        // finished), while an uncompleted item returns to the end of the active
+        // group. `done` still describes the state callers wrote before this call.
+        var insertIndex = remaining.FindIndex(item => item.Done);
         if (insertIndex < 0)
         {
             insertIndex = remaining.Count;

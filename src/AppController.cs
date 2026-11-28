@@ -246,6 +246,9 @@ public sealed partial class AppController : IDisposable
         RefreshFullscreenAvoidanceRuntime();
         RefreshTodoReminderSchedule();
         RefreshExperimentalWindowRuntime();
+        // Custom patch (dev branch): normalize completed-todo order before any
+        // todo surface is restored, so a restart also repairs a mixed legacy order.
+        ReorderCompletedTodosToBottom();
 
         if (State.Papers.Count == 0)
         {
@@ -1444,6 +1447,8 @@ public sealed partial class AppController : IDisposable
         {
             ScheduleDeferredShellPrewarm(paper, window);
         }
+        // Custom patch (dev branch): restored papers may miss SourceInitialized's source; attach now.
+        window.TryAttachWindowMessageHook();
         RefreshTrayMenu();
         if (!_suppressDirty) RefreshTodoRowsForLinkedPaper(paper.Id);
         MarkDirty();

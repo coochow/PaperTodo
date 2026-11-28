@@ -1855,7 +1855,8 @@ public sealed partial class AppController
     {
         TryResetPaperBackgroundPreferences();
         // Theme lives on the visual page with color scheme / fonts.
-        State.Theme = "system";
+        // Custom patch (dev branch): match the fork's new-install default (light).
+        State.Theme = "light";
         State.ColorScheme = ColorSchemes.Warm;
         State.PaperSkin = PaperSkins.Paper;
         State.MicaBackdropType = MicaBackdropTypes.Mica;
@@ -1876,7 +1877,8 @@ public sealed partial class AppController
         State.TitleTextBold = true;
         State.CapsuleTextSize = VisualTextSizes.Medium;
         State.CapsuleTextBold = false;
-        State.ResizeGripMode = ResizeGripModes.Soft;
+        // Custom patch (dev branch): keep the resize grip dots hidden by default.
+        State.ResizeGripMode = ResizeGripModes.Hidden;
         State.DeepCapsuleGapSize = DeepCapsuleGapSizes.Standard;
 
         AppTypography.Configure(
@@ -2647,8 +2649,17 @@ public sealed partial class AppController
     private void ToggleAutoClearCompletedTodos() =>
         SetSettingFromUi("todo.auto_clear_completed", !State.AutoClearCompletedTodos);
 
-    private void ToggleAutoMoveCompletedTodosToBottom() =>
-        SetSettingFromUi("todo.move_completed_to_bottom", !State.AutoMoveCompletedTodosToBottom);
+    // Custom patch (dev branch): enabling the switch also tidies existing completed
+    // items once; the persisted switch alone only affected later transitions.
+    private void ToggleAutoMoveCompletedTodosToBottom()
+    {
+        var enabled = !State.AutoMoveCompletedTodosToBottom;
+        SetSettingFromUi("todo.move_completed_to_bottom", enabled);
+        if (enabled)
+        {
+            ReorderCompletedTodosToBottom();
+        }
+    }
 
     private void ToggleAutoCompressLargeImages() =>
         SetSettingFromUi("note.compress_large_images", !State.AutoCompressLargeImages);
